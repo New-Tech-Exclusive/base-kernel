@@ -1,29 +1,31 @@
 #include "kernel.h"
+#include "drivers/keyboard/keyboard.h"
 
-// Simple VGA text output functions for demonstration
+// Let's have some friendly functions to draw beautiful text on your screen!
 void vga_puts(const char* s);
 void vga_putc(char c);
 void vga_clear_screen(void);
+void vga_putc_at(int pos, char c);
 
-// Use external string functions from string.c
+// We're using some helpful string functions that live in string.c
 
-// Simple sprintf for CLI
+// Our own little string formatting helper so we can put numbers in output
 char* sprintf(char* buf, const char* format, ...);
 
-// CLI function prototype
+// This is the star of the show - interpreting what you type!
 void process_command(char* cmd);
 
 static char* vga_buffer = (char*)0xB8000;
 static int vga_position = 0;
 
-// Write string to VGA text buffer
+// This grabs your message and shows it character by character on the screen
 void vga_puts(const char* s) {
     while (*s) {
         vga_putc(*s++);
     }
 }
 
-// Write character to VGA text buffer
+// This handles drawing a single letter or symbol at the spot you're typing
 void vga_putc(char c) {
     if (c == '\n') {
         vga_position += 80 - (vga_position % 80);
@@ -44,7 +46,7 @@ void vga_putc(char c) {
     }
 }
 
-// Clear screen
+// Here's how we wipe the screen clean for a fresh start
 void vga_clear_screen(void) {
     for (int i = 0; i < 2000; i++) {
         vga_buffer[i * 2] = ' ';
@@ -53,14 +55,14 @@ void vga_clear_screen(void) {
     vga_position = 0;
 }
 
-// Put character at specific position
+// This helps us place a character exactly where we want on the screen
 void vga_putc_at(int pos, char c) {
     vga_buffer[pos * 2] = c;
 }
 
-// Simple sprintf for basic usage
+// A helpful little function that inserts numbers into text strings for us
 char* sprintf(char* buf, const char* format, ...) {
-    // Very basic implementation for %d
+    // Pretty basic, but handles %d for now
     int* arg = (int*)&format + 1;
     char* buf_start = buf;
 
@@ -95,12 +97,117 @@ char* sprintf(char* buf, const char* format, ...) {
 extern uint32_t multiboot_magic;
 extern uint32_t multiboot_info;
 
+// Our cozy in-memory filesystem where everything lives
+#define MAX_FILES 64
+#define MAX_DIRS 32
+
+typedef struct {
+    char name[128];
+    int is_dir;
+} FileEntry;
+
+static char current_path[256] = "/";
+static FileEntry root_files[MAX_FILES] = {
+    {"files.txt", 0}, {"config.sys", 0}, {"programs/", 1}, {"data/", 1}, {0}
+};
+static FileEntry programs_files[MAX_FILES] = {
+    {"game.exe", 0}, {"editor.exe", 0}, {"tools/", 1}, {0}
+};
+static FileEntry data_files[MAX_FILES] = {
+    {"backup.dat", 0}, {"logs.txt", 0}, {0}
+};
+static FileEntry tools_files[MAX_FILES] = {
+    {"compile.bin", 0}, {0}
+};
+static FileEntry* dir_contents[64] = {root_files, programs_files, data_files, tools_files};
+static char dir_paths[64][256] = {"/", "/programs/", "/data/", "/programs/tools/"};
+
+static int base_authenticated = 0;
+static const char root_password[] = "admin";
+
+// Helper functions for filesystem
+int find_dir_index(const char* path) {
+    for (int i = 0; i < 64; i++) {
+        if (!*dir_paths[i]) break;
+        if (strcmp(dir_paths[i], path) == 0) return i;
+    }
+    return -1;
+}
+
+void list_files(int dir_idx, int folders_only) {
+    if (dir_idx < 0) {
+        vga_puts("Directory not found\n");
+        return;
+    }
+    FileEntry* files = dir_contents[dir_idx];
+    int count = 0;
+    for (int i = 0; i < MAX_FILES; i++) {
+        if (files[i].name[0]) {
+            if (folders_only && !files[i].is_dir) continue;
+            if (folders_only || !files[i].is_dir) {
+                vga_puts("  ");
+                vga_puts(files[i].name);
+                vga_puts("\n");
+                count++;
+            }
+        }
+    }
+    if (!count) {
+        vga_puts("  (empty)\n");
+    }
+}
+
+int delete_file(int dir_idx, const char* filename) {
+    if (dir_idx < 0) return -1;
+    FileEntry* files = dir_contents[dir_idx];
+    for (int i = 0; i < MAX_FILES; i++) {
+        if (strcmp(files[i].name, filename) == 0) {
+            // Shift remaining
+            while (files[i+1].name[0]) {
+                files[i] = files[i+1];
+                i++;
+            }
+            files[i].name[0] = 0;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+int add_directory(const char* dirname, int parent_dir_idx) {
+    // Simple impl -add to current dir
+    FileEntry* files = dir_contents[parent_dir_idx];
+    int slot = -1;
+    for (int i = 0; i < MAX_FILES; i++) {
+        if (!files[i].name[0]) {
+            slot = i;
+            break;
+        }
+    }
+    if (slot == -1) return -1;
+    
+    // Add dir entry
+    sprintf(files[slot].name, "%s/", dirname);
+    files[slot].is_dir = 1;
+    
+    // Find available dir slot
+    for (int d = 0; d < 64; d++) {
+        if (!*dir_paths[d]) {
+            sprintf(dir_paths[d], "%s%s/", current_path, dirname);
+            // Empty content
+            if (d < sizeof(dir_contents)/sizeof(dir_contents[0])) {
+                dir_contents[d] = &files[MAX_FILES]; // Point to new empty
+            }
+            break;
+        }
+    }
+    return 0;
+}
+
 /* Simple CLI buffer */
 static char cli_buffer[256];
 static int cli_pos = 0;
 
-/* Extern keyboard last key */
-extern char last_key;
 /*
  * Base Kernel Main Entry Point
  *
@@ -158,85 +265,6 @@ void kernel_init(void)
     kernel_main();
 }
 
-// Custom keyboard poll function
-unsigned char keyboard_poll(void) {
-    unsigned char scancode = 0;
-    // Poll keyboard controller
-    __asm__ volatile ("inb $0x60, %0" : "=a"(scancode));
-    return scancode;
-}
-
-char keyboard_getchar(void) {
-    static unsigned char scancodes_ascii[] = {
-        0, 27, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', '\b',
-        '\t', 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', '\n',
-        0, 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '`',
-        0, '\\', 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/', 0,
-        '*', 0, ' '
-    };
-
-    static int shift_pressed = 0;
-    static int caps_lock = 0;
-    static int key_down = 0;
-
-    while (1) {
-        unsigned char scancode = keyboard_poll();
-        if (scancode == 0x2A || scancode == 0x36) {
-            // Left/Right Shift press
-            shift_pressed = 1;
-            continue;
-        } else if (scancode == (0x2A | 0x80) || scancode == (0x36 | 0x80)) {
-            // Left/Right Shift release
-            shift_pressed = 0;
-            continue;
-        } else if (scancode == 0x3A) {
-            // Caps Lock
-            caps_lock = !caps_lock;
-            continue;
-        } else if (scancode & 0x80) {
-            // Key release
-            key_down = 0;
-            continue;
-        } else if (scancode < 128 && !key_down) {
-            // Key press and not already down
-            key_down = 1;
-            if (scancode < sizeof(scancodes_ascii)) {
-                char c = scancodes_ascii[scancode];
-                if (c >= 'a' && c <= 'z') {
-                    if (shift_pressed || (caps_lock && !shift_pressed)) {
-                        c = c - 'a' + 'A';  // Uppercase
-                    }
-                } else if (shift_pressed) {
-                    // Other shift mappings
-                    if (c == '1') c = '!';
-                    else if (c == '2') c = '@';
-                    else if (c == '3') c = '#';
-                    else if (c == '4') c = '$';
-                    else if (c == '5') c = '%';
-                    else if (c == '6') c = '^';
-                    else if (c == '7') c = '&';
-                    else if (c == '8') c = '*';
-                    else if (c == '9') c = '(';
-                    else if (c == '0') c = ')';
-                    else if (c == '-') c = '_';
-                    else if (c == '=') c = '+';
-                    else if (c == '[') c = '{';
-                    else if (c == ']') c = '}';
-                    else if (c == '\\') c = '|';
-                    else if (c == ';') c = ':';
-                    else if (c == '\'') c = '"';
-                    else if (c == ',') c = '<';
-                    else if (c == '.') c = '>';
-                    else if (c == '/') c = '?';
-                }
-                return c;
-            }
-        // Faster polling
-        // for (volatile int i = 0; i < 10; i++);
-    }
-}
-}
-
 /* Main kernel loop - CLI interface */
 void kernel_main(void)
 {
@@ -249,7 +277,9 @@ void kernel_main(void)
     int buf_pos = 0;
 
     while (1) {
-        vga_puts("kernel> ");
+        vga_puts("kernel:");
+        vga_puts(current_path);
+        vga_puts("> ");
         int cursor_pos = vga_position;
         vga_putc('_');  // Show cursor
         buf_pos = 0;
@@ -267,14 +297,14 @@ void kernel_main(void)
                 process_command(buffer);
                 vga_puts("\n");
                 break;  // Back to outer loop for new prompt
-            } else if (c == '\b') {
-                // Backspace
-                if (buf_pos > 0) {
-                    vga_putc_at(cursor_pos + buf_pos - 1, ' ');  // Erase the last character
-                    vga_putc_at(cursor_pos + buf_pos, ' ');      // Erase the cursor
-                    buf_pos--;
-                    vga_putc_at(cursor_pos + buf_pos, '_');      // Place cursor at new position
-                }
+    } else if (c == '\b') {
+        // This lets you erase a character when you make a typing mistake
+        if (vga_position > 0) {
+            vga_position--;
+            vga_buffer[vga_position * 2] = ' ';
+            vga_buffer[vga_position * 2 + 1] = 0x07;
+        }
+    }
             } else if (buf_pos < sizeof(buffer) - 1) {
                 // Add character to buffer
                 buffer[buf_pos] = c;
@@ -289,30 +319,55 @@ void kernel_main(void)
 /* Process a command entered at the CLI */
 void process_command(char* cmd)
 {
-    if (cmd[0] == '\0') {
-        // Empty command
-        return;
+    // Parse command: skip leading spaces, extract command name and args
+    char cmd_copy[128];
+    strcpy(cmd_copy, cmd);
+    char* token = cmd_copy;
+    
+    // Skip leading spaces
+    while (*token == ' ') token++;
+    
+    // Get command name
+    char* cmd_name = token;
+    while (*token && *token != ' ') token++;
+    if (*token == ' ') {
+        *token++ = '\0';
+        // Skip spaces after command
+        while (*token == ' ') token++;
+    }
+    char* args = token;
+
+    if (cmd_name[0] == '\0') {
+        return; // Empty command
     }
 
-    if (strcmp(cmd, "help") == 0) {
+    // Help command
+    if (strcmp(cmd_name, "help") == 0) {
         vga_puts("Available commands:\n");
         vga_puts("  help     - Show this help message\n");
-        vga_puts("  echo     - Echo arguments back\n");
+        vga_puts("  echo     - Echo arguments\n");
         vga_puts("  clear    - Clear the screen\n");
         vga_puts("  info     - Display kernel information\n");
         vga_puts("  uptime   - Show kernel uptime\n");
         vga_puts("  test     - Run system test\n");
-    } else if (strncmp(cmd, "echo ", 5) == 0) {
-        vga_puts(cmd + 5);
+        vga_puts("  pwd      - Show current directory\n");
+        vga_puts("  auth     - Authenticate as root\n");
+        vga_puts("  baex     - Execute command with base privilege (requires auth)\n");
+        vga_puts("  dir      - Change directory (dir <path>)\n");
+        vga_puts("  li       - List directory contents (li or li -f for folders)\n");
+        vga_puts("  de       - Delete file (requires base privilege, de <filename>)\n");
+        vga_puts("  crdir    - Create directory (crdir <dirname>)\n");
+    } else if (strcmp(cmd_name, "echo") == 0) {
+        vga_puts(args);
         vga_puts("\n");
-    } else if (strcmp(cmd, "clear") == 0) {
+    } else if (strcmp(cmd_name, "clear") == 0) {
         vga_clear_screen();
-    } else if (strcmp(cmd, "info") == 0) {
+    } else if (strcmp(cmd_name, "info") == 0) {
         vga_puts("Base Kernel v0.1.0\n");
         vga_puts("Architecture: x86_64\n");
         vga_puts("Mode: Long mode (64-bit)\n");
         vga_puts("Features: Memory management, Scheduling, VFS\n");
-    } else if (strcmp(cmd, "uptime") == 0) {
+    } else if (strcmp(cmd_name, "uptime") == 0) {
         static int uptime = 0;
         uptime++;
         vga_puts("Uptime: ");
@@ -320,7 +375,110 @@ void process_command(char* cmd)
         char buf[20];
         sprintf(buf, "%d seconds\n", uptime);
         vga_puts(buf);
-    } else if (strcmp(cmd, "test") == 0) {
+    } else if (strcmp(cmd_name, "pwd") == 0) {
+        vga_puts("Current directory: ");
+        vga_puts(current_path);
+        vga_puts("\n");
+    } else if (strcmp(cmd_name, "auth") == 0) {
+        vga_puts("Enter root password: ");
+        char pass[32];
+        int idx = 0;
+        while (idx < 31) {
+            char c = keyboard_getchar();
+            if (c == '\n') break;
+            pass[idx++] = c;
+        }
+        pass[idx] = 0;
+        if (strcmp(pass, root_password) == 0) {
+            base_authenticated = 1;
+            vga_puts("\nAuthentication successful\n");
+        } else {
+            vga_puts("\nAuthentication failed\n");
+        }
+    } else if (strcmp(cmd_name, "baex") == 0) {
+        if (base_authenticated) {
+            process_command(args);
+        } else {
+            vga_puts("Base privilege required. You are not authenticated. Run 'auth'\n");
+        }
+    } else if (strcmp(cmd_name, "dir") == 0) {
+        const char* target = args;
+        if (target[0] == '\0') {
+            vga_puts("Usage: dir <directory>\n");
+            return;
+        }
+        char newpath[256];
+        if (target[0] == '/') {
+            strcpy(newpath, target);
+        } else {
+            strcpy(newpath, current_path);
+            if (strcmp(current_path, "/") != 0) strcat(newpath, "/");
+            strcat(newpath, target);
+        }
+        // Normalize
+        if (newpath[strlen(newpath)-1] != '/') strcat(newpath, "/");
+        
+        if (find_dir_index(newpath) >= 0) {
+            strcpy(current_path, newpath);
+            vga_puts("Changed to ");
+            vga_puts(current_path);
+            vga_puts("\n");
+        } else {
+            vga_puts("Directory not found: ");
+            vga_puts(target);
+            vga_puts("\n");
+        }
+    } else if (strcmp(cmd_name, "li") == 0) {
+        if (strcmp(args, "-f") == 0) {
+            int idx = find_dir_index(current_path);
+            vga_puts("Directories in ");
+            vga_puts(current_path);
+            vga_puts(":\n");
+            list_files(idx, 1);
+        } else if (args[0] == '\0') {
+            int idx = find_dir_index(current_path);
+            vga_puts("Contents of ");
+            vga_puts(current_path);
+            vga_puts(":\n");
+            list_files(idx, 0);
+        } else {
+            vga_puts("li: unrecognized option '");
+            vga_puts(args);
+            vga_puts("'\n");
+        }
+    } else if (strcmp(cmd_name, "de") == 0) {
+        if (args[0] == '\0') {
+            vga_puts("Usage: de <filename>\n");
+            return;
+        }
+        if (base_authenticated) {
+            int idx = find_dir_index(current_path);
+            if (delete_file(idx, args) == 0) {
+                vga_puts("Deleted: ");
+                vga_puts(args);
+                vga_puts("\n");
+            } else {
+                vga_puts("File not found: ");
+                vga_puts(args);
+                vga_puts("\n");
+            }
+        } else {
+            vga_puts("Base privilege required for deletion\n");
+        }
+    } else if (strcmp(cmd_name, "crdir") == 0) {
+        if (args[0] == '\0') {
+            vga_puts("Usage: crdir <directory_name>\n");
+            return;
+        }
+        int idx = find_dir_index(current_path);
+        if (add_directory(args, idx) == 0) {
+            vga_puts("Created directory: ");
+            vga_puts(args);
+            vga_puts("\n");
+        } else {
+            vga_puts("Failed to create directory\n");
+        }
+    } else if (strcmp(cmd_name, "test") == 0) {
         vga_puts("Running system tests...\n");
         vga_puts("Memory test: PASSED\n");
         vga_puts("Scheduler test: PASSED\n");
@@ -328,7 +486,7 @@ void process_command(char* cmd)
         vga_puts("All tests completed successfully!\n");
     } else {
         vga_puts("Unknown command: ");
-        vga_puts(cmd);
+        vga_puts(cmd_name);
         vga_puts("\n");
         vga_puts("Type 'help' for available commands\n");
     }

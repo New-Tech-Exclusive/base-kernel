@@ -1,49 +1,50 @@
 #include "kernel.h"
 
 /*
- * Simple round-robin task scheduler
- * Manages task switching and context switching
+ * Our friendly task manager!
+ * This rotates between different running programs fairly
+ * and helps switch between them smoothly
  */
 
-// Task states
+// What mood each task is in right now
 typedef enum {
-    TASK_READY,
-    TASK_RUNNING,
-    TASK_BLOCKED,
-    TASK_TERMINATED
+    TASK_READY,      // "Ready to party!"
+    TASK_RUNNING,    // "I'm doing my thing!"
+    TASK_BLOCKED,    // "Waiting for something"
+    TASK_TERMINATED  // "All done, see ya!"
 } task_state_t;
 
-// Task structure
+// All about a single task - like a player in our game
 typedef struct task {
-    uint64_t id;
-    task_state_t state;
-    uint64_t* stack_top;      // Top of task stack
-    uint64_t* stack_bottom;   // Bottom of task stack
-    struct task* next;        // Next task in ready queue
-    uint64_t ticks_remaining; // Time slice remaining
+    uint64_t id;               // Like a name tag for each task
+    task_state_t state;        // What's this task up to?
+    uint64_t* stack_top;       // Top of stack (high address)
+    uint64_t* stack_bottom;    // Bottom of stack (low address)
+    struct task* next;         // Next player in line
+    uint64_t ticks_remaining;  // How much time left in my turn?
 } task_t;
 
-// Scheduler state
-static task_t* current_task = NULL;
-static task_t* ready_queue_head = NULL;
-static task_t* ready_queue_tail = NULL;
-static uint64_t next_task_id = 0;
-static uint64_t total_tasks = 0;
+// Our task management team - keeping track of who is doing what
+static task_t* current_task = NULL;          // Who's running right now?
+static task_t* ready_queue_head = NULL;      // First person waiting for their turn
+static task_t* ready_queue_tail = NULL;      // Last person waiting for their turn
+static uint64_t next_task_id = 0;            // Next available ID number
+static uint64_t total_tasks = 0;             // How many players are in the game?
 
-// Task time slice (in timer ticks)
-#define TASK_TIME_SLICE  10  // 100ms at 100Hz
+// How long each task gets to have their fun (measured in timer beats)
+#define TASK_TIME_SLICE  10  // ~100ms at 100Hz - enough for a quick dance
 
-// Forward declarations
+// Telling the compiler we'll define these helper functions later
 static void scheduler_switch_to_task(task_t* task);
 static void scheduler_save_context(task_t* task);
 static task_t* scheduler_get_next_task(void);
 static void scheduler_schedule(void);
 void scheduler_add_to_ready_queue(task_t* task);
 
-// Initialize the scheduler
+// Get the party started - set up our task manager
 void scheduler_init(void)
 {
-    KINFO("Initializing task scheduler...");
+    KINFO("Waking up our task organizer...");
 
     // Create idle task (kernel main loop)
     task_t* idle_task = kmalloc(sizeof(task_t));
@@ -65,21 +66,21 @@ void scheduler_init(void)
     KINFO("Scheduler initialized with %u task(s)", total_tasks);
 }
 
-// Create a new task
+// Let's create a new task - like inviting a new player to our party!
 uint64_t scheduler_create_task(void (*entry_point)(void), void* stack, size_t stack_size)
 {
     if (!entry_point || !stack || stack_size < PAGE_SIZE) {
-        KERROR("Invalid parameters for task creation");
+        KERROR("Hmm, the new player needs valid information!");
         return 0;
     }
 
     task_t* task = kmalloc(sizeof(task_t));
     if (!task) {
-        KERROR("Failed to allocate task structure");
+        KERROR("Oops, couldn't set up the player's information!");
         return 0;
     }
 
-    // Initialize task
+    // Give our new player an ID and get them ready to play
     task->id = next_task_id++;
     task->state = TASK_READY;
     task->stack_bottom = stack;
@@ -87,28 +88,28 @@ uint64_t scheduler_create_task(void (*entry_point)(void), void* stack, size_t st
     task->next = NULL;
     task->ticks_remaining = TASK_TIME_SLICE;
 
-    // Setup initial stack frame (simulate ISR context)
+    // Set up their playing area (simulate interrupt environment)
     uint64_t* sp = task->stack_top;
 
-    // Leave space for registers that would be saved by ISR
-    sp -= 23; // Skip registers saved by ISR
+    // Make room for saved registers (what computer needs to remember)
+    sp -= 23; // Skip registers that interrupt would save
 
-    // Set up the stack as if an interrupt occurred
-    // RIP (instruction pointer)
+    // Prepare the stack as if an interrupt just happened
+    // Their "next instruction" to run when they start
     *(--sp) = (uint64_t)entry_point;
-    // CS, RFLAGS, RSP, SS (simplified - using kernel segments)
-    *(--sp) = 0x08; // Kernel code segment
-    *(--sp) = 0x202; // RFLAGS (interrupts enabled)
-    *(--sp) = (uint64_t)sp + 8; // RSP
-    *(--sp) = 0x10; // Kernel data segment
+    // System settings: code segment, interrupts enabled, etc.
+    *(--sp) = 0x08; // Kernel code segment selector
+    *(--sp) = 0x202; // Flags (interrupts on, important!)
+    *(--sp) = (uint64_t)sp + 8; // Where their stack will be
+    *(--sp) = 0x10; // Kernel data segment selector
 
     task->stack_top = sp;
     total_tasks++;
 
-    // Add to ready queue
+    // Add them to the waiting line
     scheduler_add_to_ready_queue(task);
 
-    KINFO("Created task %u (%u total tasks)", task->id, total_tasks);
+    KINFO("New player %u joined the game (%u total now)!", task->id, total_tasks);
     return task->id;
 }
 

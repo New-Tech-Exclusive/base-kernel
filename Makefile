@@ -15,8 +15,8 @@ TARGET := $(ARCH)-elf
 # LD := $(TARGET)-ld
 
 # Compiler and assembler flags
-CFLAGS := -std=c11 -ffreestanding -m64 -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -O2 -Wall -Wextra -pedantic \
-          -I src/include -I src/arch/$(ARCH)/include -fno-stack-protector
+CFLAGS := -std=c11 -ffreestanding -m64 -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -O2 -Wall -Wextra \
+          -I src/include -I src/arch/$(ARCH)/include -I src -fno-stack-protector
 
 ASFLAGS := -f elf64
 
@@ -61,7 +61,8 @@ KERNEL_SRCS := $(filter-out src/kernel/stubs.c src/kernel/scheduler_temp.c, $(KE
 
 DRIVER_SRCS := $(wildcard src/drivers/*.c) \
                $(wildcard src/drivers/video/*.c) \
-               $(wildcard src/drivers/serial/*.c)
+               $(wildcard src/drivers/serial/*.c) \
+               $(wildcard src/drivers/keyboard/*.c)
 
 SRCS := $(BOOT_SRCS) $(ARCH_SRCS) $(KERNEL_SRCS) $(DRIVER_SRCS)
 
