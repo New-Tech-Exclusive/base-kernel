@@ -106,12 +106,13 @@ void gdt_init(void)
         "mov $0x10, %ax\n"
         "mov %ax, %ds\n"
         "mov %ax, %es\n"
+        "mov %ax, %es\n"
         "mov %ax, %fs\n"
         "mov %ax, %gs\n"
         "mov %ax, %ss\n"
         "push $0x08\n"
         "push $.reload_cs\n"
-        "retfq\n"
+        ".byte 0x48, 0xcb\n"  // retfq opcode
         ".reload_cs:\n"
     );
 

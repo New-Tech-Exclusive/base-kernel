@@ -15,13 +15,12 @@ TARGET := $(ARCH)-elf
 # LD := $(TARGET)-ld
 
 # Compiler and assembler flags
-CFLAGS := -std=c11 -ffreestanding -m64 -mno-red-zone \
-          -mno-mmx -mno-sse -mno-sse2 -O2 -Wall -Wextra -pedantic \
-          -I src/include -I src/arch/$(ARCH)/include
+CFLAGS := -std=c11 -ffreestanding -m64 -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -O2 -Wall -Wextra -pedantic \
+          -I src/include -I src/arch/$(ARCH)/include -fno-stack-protector
 
 ASFLAGS := -f elf64
 
-LDFLAGS := -T src/kernel.ld -nostdlib -z max-page-size=0x1000
+LDFLAGS := -m elf_x86_64 -T src/kernel.ld -nostdlib -z max-page-size=0x1000
 OBJCOPY := objcopy
 
 # Create raw binary image for bootloader
@@ -57,8 +56,8 @@ KERNEL_SRCS := $(wildcard src/kernel/*.c) \
                $(wildcard src/kernel/syscall/*.c) \
                $(wildcard src/fs/*.c)
 
-# Exclude stubs.c since we have real implementations now
-KERNEL_SRCS := $(filter-out src/kernel/stubs.c, $(KERNEL_SRCS))
+# Exclude stubs.c and scheduler_temp.c since we have real implementations now
+KERNEL_SRCS := $(filter-out src/kernel/stubs.c src/kernel/scheduler_temp.c, $(KERNEL_SRCS))
 
 DRIVER_SRCS := $(wildcard src/drivers/*.c) \
                $(wildcard src/drivers/video/*.c) \
@@ -74,7 +73,7 @@ ARCH_OBJS := $(ARCH_OBJS:.c=.o)
 KERNEL_OBJS := $(KERNEL_SRCS:.c=.o)
 DRIVER_OBJS := $(DRIVER_SRCS:.c=.o)
 
-OBJS := $(BOOT_OBJS) $(ARCH_OBJS) $(KERNEL_OBJS) $(DRIVER_OBJS)
+OBJS := $(BOOT_OBJS) $(ARCH_OBJS) $(KERNEL_OBJS) $(filter-out src/drivers/video/vga.o, $(DRIVER_OBJS))
 
 # Build targets
 .PHONY: all clean run iso debug
@@ -102,9 +101,9 @@ base-kernel.iso: kernel.elf
 	cp scripts/grub.cfg isofiles/boot/grub/
 	grub-mkrescue -o $@ isofiles/ 2>/dev/null || grub2-mkrescue -o $@ isofiles/
 
-# Run in QEMU
+# Run in QEMU using iso with GRUB
 run: base-kernel.iso
-	qemu-system-x86_64 -cdrom $< -boot d -m 512M -serial stdio
+	qemu-system-x86_64 -cdrom $< -boot d -m 512M
 
 # Run disk image in QEMU
 rundisk: bootdisk.img

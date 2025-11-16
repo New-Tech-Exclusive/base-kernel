@@ -1,37 +1,21 @@
 ; Base Kernel Boot Code for x86-64
-; This code is loaded by GRUB using the Multiboot 2 specification
+; This code is loaded by GRUB using the Multiboot specification
 
-; Multiboot 2 header
-section .multiboot
-align 8
-multiboot_header_start:
-    dd 0xE85250D6                ; Magic number
-    dd 0                         ; Architecture (0 = i386 protected mode)
-    dd multiboot_header_end - multiboot_header_start ; Header length
-    dd -(0xE85250D6 + 0 + (multiboot_header_end - multiboot_header_start)) ; Checksum
-
-    ; Information request tag
-    dw 1                         ; Type
-    dw 0                         ; Flags
-    dd 12                        ; Size
-    dd 0                         ; Request tag (Required end tag)
-
-    ; Framebuffer tag
-    dw 5                         ; Type
-    dw 0                         ; Flags
-    dd 20                        ; Size
-    dd 0                         ; Width (0 = no preference)
-    dd 0                         ; Height (0 = no preference)
-    dd 0                         ; Depth (0 = text mode)
-
-    ; End tag
-    dw 0                         ; Type
-    dw 0                         ; Flags
-    dd 8                         ; Size
-multiboot_header_end:
+; Multiboot header
+MULTIBOOT_PAGE_ALIGN	equ 1<<0
+MULTIBOOT_MEMORY_INFO	equ 1<<1
+MULTIBOOT_AOUT_KLUDGE	equ 1<<16
+MULTIBOOT_HEADER_MAGIC	equ 0x1BADB002
+MULTIBOOT_HEADER_FLAGS	equ MULTIBOOT_PAGE_ALIGN | MULTIBOOT_MEMORY_INFO
+MULTIBOOT_CHECKSUM	equ -(MULTIBOOT_HEADER_MAGIC + MULTIBOOT_HEADER_FLAGS)
 
 ; Kernel entry point
 section .text.start
+align 4
+multiboot_header:
+    dd MULTIBOOT_HEADER_MAGIC
+    dd MULTIBOOT_HEADER_FLAGS
+    dd MULTIBOOT_CHECKSUM
 global _start
 extern kernel_early_init
 
@@ -51,7 +35,7 @@ _start:
     mov esp, stack_top
 
     ; Check if we got the expected multiboot magic
-    cmp eax, 0x36D76289
+    cmp eax, 0x2BADB002
     jne .error
 
     ; Basic CPU setup
@@ -140,8 +124,8 @@ kmain64:
     mov fs, ax
     mov gs, ax
 
-    ; Set up proper stack (should be safe in identity mapped area)
-    mov rsp, stack_top
+    ; Set up proper stack (safe low address in identity mapped area)
+    mov rsp, 0x1F000
 
     ; Jump to kernel_early_init (now in 64-bit mode)
     call kernel_early_init

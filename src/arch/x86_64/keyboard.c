@@ -46,6 +46,9 @@ static bool shift_pressed = false;
 static bool ctrl_pressed = false;
 static bool alt_pressed = false;
 
+// Last input character for CLI
+char last_key = 0;
+
 // Forward declarations for static functions
 static void keyboard_handle_keypress(uint8_t scancode);
 static void keyboard_handle_keyrelease(uint8_t scancode);
@@ -138,12 +141,9 @@ static void keyboard_handle_keypress(uint8_t scancode)
             }
         }
 
-        // Print character
+        // Set last key for CLI
         if (ascii) {
-            char buf[2] = {ascii, 0};
-            KINFO("Keyboard: '%s' (scancode: 0x%02x)", buf, scancode);
-        } else {
-            KINFO("Keyboard: special key (scancode: 0x%02x)", scancode);
+            last_key = ascii;
         }
     }
 }

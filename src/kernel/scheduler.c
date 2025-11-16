@@ -37,6 +37,8 @@ static uint64_t total_tasks = 0;
 static void scheduler_switch_to_task(task_t* task);
 static void scheduler_save_context(task_t* task);
 static task_t* scheduler_get_next_task(void);
+static void scheduler_schedule(void);
+void scheduler_add_to_ready_queue(task_t* task);
 
 // Initialize the scheduler
 void scheduler_init(void)

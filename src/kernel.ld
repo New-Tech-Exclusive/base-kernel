@@ -3,15 +3,17 @@
 ENTRY(_start)
 
 SECTIONS {
-    /* Kernel will be loaded at 0x100000 (1MB) by GRUB */
-    /* Higher half mapping will be set up after entering long mode */
-    . = 0x100000;
+    /* Multiboot header must be at file offset 0 */
+    . = 0;
 
-    /* Multiboot header must be in first 8KB */
     .multiboot : ALIGN(8) {
         KEEP(*(.multiboot))
         . = ALIGN(8);
     }
+
+    /* Kernel will be loaded at 0x100000 (1MB) by GRUB */
+    /* Higher half mapping will be set up after entering long mode */
+    . = 0x100000;
 
     /* Text section */
     .text : ALIGN(4K) {
