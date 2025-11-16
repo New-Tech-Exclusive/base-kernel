@@ -1,36 +1,36 @@
 #include "kernel.h"
 #include "drivers/keyboard/keyboard.h"
 
-// Let's have some friendly functions to draw beautiful text on your screen!
+// VGA text output functions for console display
 void vga_puts(const char* s);
 void vga_putc(char c);
 void vga_clear_screen(void);
 void vga_putc_at(int pos, char c);
 
-// We're using some helpful string functions that live in string.c
+// Using string utilities from string.c
 
-// Our own little string formatting helper so we can put numbers in output
+// Lightweight sprintf implementation for basic formatting
 char* sprintf(char* buf, const char* format, ...);
 
-// This is the star of the show - interpreting what you type!
+// Main command processing function
 void process_command(char* cmd);
 
 static char* vga_buffer = (char*)0xB8000;
 static int vga_position = 0;
 
-// This grabs your message and shows it character by character on the screen
+// Write null-terminated string to VGA buffer at current position
 void vga_puts(const char* s) {
     while (*s) {
         vga_putc(*s++);
     }
 }
 
-// This handles drawing a single letter or symbol at the spot you're typing
+// Write single character to VGA buffer, handling special chars
 void vga_putc(char c) {
     if (c == '\n') {
         vga_position += 80 - (vga_position % 80);
     } else if (c == '\b') {
-        // Backspace
+        // Backspace handling
         if (vga_position > 0) {
             vga_position--;
             vga_buffer[vga_position * 2] = ' ';
@@ -42,11 +42,11 @@ void vga_putc(char c) {
         vga_position++;
     }
     if (vga_position >= 2000) {
-        vga_position = 0;  // Wrap around
+        vga_position = 0;  // Screen wrap-around
     }
 }
 
-// Here's how we wipe the screen clean for a fresh start
+// Clear entire VGA text buffer and reset cursor position
 void vga_clear_screen(void) {
     for (int i = 0; i < 2000; i++) {
         vga_buffer[i * 2] = ' ';
@@ -55,14 +55,14 @@ void vga_clear_screen(void) {
     vga_position = 0;
 }
 
-// This helps us place a character exactly where we want on the screen
+// Write character directly to specified VGA buffer position
 void vga_putc_at(int pos, char c) {
     vga_buffer[pos * 2] = c;
 }
 
-// A helpful little function that inserts numbers into text strings for us
+// Basic sprintf implementation supporting %d format specifier
 char* sprintf(char* buf, const char* format, ...) {
-    // Pretty basic, but handles %d for now
+    // Limited implementation - handles integer formatting only
     int* arg = (int*)&format + 1;
     char* buf_start = buf;
 
@@ -97,7 +97,7 @@ char* sprintf(char* buf, const char* format, ...) {
 extern uint32_t multiboot_magic;
 extern uint32_t multiboot_info;
 
-// Our cozy in-memory filesystem where everything lives
+// Simple in-memory filesystem implementation
 #define MAX_FILES 64
 #define MAX_DIRS 32
 
@@ -204,64 +204,62 @@ int add_directory(const char* dirname, int parent_dir_idx) {
     return 0;
 }
 
-/* Simple CLI buffer */
+/* Command line interface buffer - not currently used */
 static char cli_buffer[256];
 static int cli_pos = 0;
 
 /*
- * Base Kernel Main Entry Point
- *
- * This is the main kernel file that initializes all subsystems
- * and starts the first process.
+ * Kernel entry point from assembly boot code
+ * Performs minimal setup to test C environment
  */
-
-/* Early initialization - called from assembly boot code */
 void kernel_early_init(void)
 {
-    /* Minimize initialization to test if C entry works */
-    // Just by having this function called, we know assembly→C transition works
+    /* Pre-initialization test - verify assembly to C transition */
     kernel_main();
 }
 
-/* Main kernel initialization */
+/*
+ * Main kernel initialization sequence
+ * Sets up all core kernel subsystems in proper order
+ */
 void kernel_init(void)
 {
     kernel_info("Base Kernel Main Initialization");
 
-    /* Initialize physical memory manager (needs identity mapping from bootloader) */
+    /* Memory management - identity mapping required from bootloader */
     pmm_init();
 
-    /* Initialize kernel heap (uses PMM) */
+    /* Kernel heap allocation (depends on PMM) */
     kheap_init();
 
-    /* Set up CPU state - GDT should be after basic memory allocators */
+    /* CPU state setup - GDT initialization after memory allocators */
     gdt_init();          /* Global Descriptor Table */
 
-    /* Set up interrupts - IDT MUST be initialized before any interrupts */
+    /* Interrupt handling - IDT must precede interrupt enabling */
     idt_init();          /* Interrupt Descriptor Table */
 
-    /* Set up programmable interrupt controller */
+    /* Programmable interrupt controller configuration */
     pic_init();
 
-    /* Initialize virtual memory (extend identity mapping, don't re-enable paging) */
+    /* Virtual memory paging (extends bootloader identity mapping) */
     paging_init();
 
-    /* Initialize devices */
+    /* Device driver initialization */
     timer_init();
     keyboard_init();
 
-    /* Scheduler setup (basic framework) */
+    /* Task scheduling framework */
     scheduler_init();
 
-    /* Initialize VFS */
+    /* Virtual filesystem setup */
     vfs_init();
 
     kernel_info("Kernel initialization complete, enabling interrupts");
 
-    /* Enable interrupts now that everything is set up */
+    /* Enable interrupts with all handlers in place */
     __asm__ volatile("sti");
 
-    /* Start the main kernel loop */
+    /* Enter main kernel loop */
     kernel_main();
 }
 
@@ -297,14 +295,14 @@ void kernel_main(void)
                 process_command(buffer);
                 vga_puts("\n");
                 break;  // Back to outer loop for new prompt
-    } else if (c == '\b') {
-        // This lets you erase a character when you make a typing mistake
-        if (vga_position > 0) {
-            vga_position--;
-            vga_buffer[vga_position * 2] = ' ';
-            vga_buffer[vga_position * 2 + 1] = 0x07;
-        }
-    }
+            } else if (c == '\b') {
+                // This lets you erase a character when you make a typing mistake
+                if (buf_pos > 0) {
+                    vga_putc_at(cursor_pos + buf_pos - 1, ' ');  // Erase the last character
+                    vga_putc_at(cursor_pos + buf_pos, ' ');      // Erase the cursor
+                    buf_pos--;
+                    vga_putc_at(cursor_pos + buf_pos, '_');      // Place cursor at new position
+                }
             } else if (buf_pos < sizeof(buffer) - 1) {
                 // Add character to buffer
                 buffer[buf_pos] = c;
