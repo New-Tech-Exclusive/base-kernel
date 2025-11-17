@@ -21,6 +21,10 @@ typedef uint64_t physaddr_t;
 /* Process ID type */
 typedef int32_t pid_t;
 
+/* User and group ID types */
+typedef uint32_t uid_t;
+typedef uint32_t gid_t;
+
 /* File modes */
 typedef uint16_t umode_t;
 
@@ -30,6 +34,38 @@ typedef int64_t loff_t;
 
 /* Device type */
 typedef uint32_t dev_t;
+
+/* System V IPC key type */
+typedef int32_t key_t;
+
+/* Time type */
+typedef uint64_t time_t;
+
+/* IPC permissions structure */
+struct ipc_perm {
+    key_t           __key;      /* Key */
+    uid_t           uid;        /* Owner's user ID */
+    gid_t           gid;        /* Owner's group ID */
+    uid_t           cuid;       /* Creator's user ID */
+    gid_t           cgid;       /* Creator's group ID */
+    uint16_t        mode;       /* Permission bits */
+    uint16_t        __seq;      /* Sequence number */
+};
+
+/* Shared memory identifier descriptor */
+struct shmid_ds {
+    struct ipc_perm shm_perm;    /* Ownership and permissions */
+    size_t          shm_segsz;   /* Size of segment (bytes) */
+    time_t          shm_atime;   /* Last attach time */
+    time_t          shm_dtime;   /* Last detach time */
+    time_t          shm_ctime;   /* Last change time */
+    pid_t           shm_cpid;    /* PID of creator */
+    pid_t           shm_lpid;    /* PID of last shmop */
+    unsigned short  shm_nattch;  /* No. of current attaches */
+    unsigned short  shm_unused;  /* Compatibility */
+    void            *shm_unused2;/* Ditto - used by DIPC */
+    void            *shm_unused3;/* Unused */
+};
 
 /* Linux-style list head and related structures */
 struct list_head {
@@ -105,6 +141,10 @@ struct timezone {
     int tz_minuteswest;
     int tz_dsttime;
 };
+
+/* Filesystem type (forward declared for VFS) */
+struct file_system_type;
+typedef struct file_system_type filesystem_t;
 
 /* Common macros */
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))

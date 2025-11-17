@@ -1,4 +1,5 @@
 #include "kernel.h"
+#include "io.h"
 
 /*
  * Programmable Interrupt Controller (PIC) driver

@@ -1,4 +1,5 @@
 #include "kernel.h"
+#include "io.h"
 
 /*
  * Basic Serial Port Driver for x86

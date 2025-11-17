@@ -18,7 +18,7 @@ typedef struct interrupt_frame {
 
     // Pushed by CPU
     uint64_t rip, cs, rflags, rsp, ss;
-} __PACKED interrupt_frame_t;
+} __attribute__((packed)) interrupt_frame_t;
 
 // Exception message table
 const char* exception_messages[32] = {

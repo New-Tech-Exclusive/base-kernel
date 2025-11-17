@@ -14,13 +14,13 @@ typedef struct {
     uint16_t offset_middle;
     uint32_t offset_high;
     uint32_t reserved;
-} __PACKED idt_entry_t;
+} __attribute__((packed)) idt_entry_t;
 
 // IDT pointer structure
 typedef struct {
     uint16_t limit;
     uintptr_t base;
-} __PACKED idt_pointer_t;
+} __attribute__((packed)) idt_pointer_t;
 
 // Number of IDT entries
 #define IDT_ENTRIES 256

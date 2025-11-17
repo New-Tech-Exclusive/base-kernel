@@ -1,4 +1,5 @@
 #include "kernel.h"
+#include "io.h"
 
 /*
  * PS/2 Keyboard driver

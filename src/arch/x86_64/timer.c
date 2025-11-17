@@ -1,4 +1,5 @@
 #include "kernel.h"
+#include "io.h"
 
 /*
  * Timer system using Programmable Interval Timer (PIT)

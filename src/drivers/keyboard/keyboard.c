@@ -1,4 +1,5 @@
 #include "kernel.h"
+#include "io.h"
 
 // Custom keyboard poll function
 unsigned char keyboard_poll(void) {

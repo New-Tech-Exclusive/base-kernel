@@ -25,12 +25,26 @@ typedef struct {
     uint32_t reserved;
 } __PACKED multiboot_memory_map_entry_t;
 
-// Memory bitmap
+// Enhanced PMM with page frame caching and optimized allocation
 static uint8_t* memory_bitmap;
 static size_t memory_bitmap_size;
 static uintptr_t memory_start;
 static size_t total_memory_pages;
 static size_t used_memory_pages;
+
+// Page frame cache for common allocation sizes (per CPU)
+// Each cache entry holds a list of free pages
+#define PF_CACHE_SIZE 32
+static uint64_t* pf_cache_hot[PF_CACHE_SIZE];  // Hot cache - recently freed pages
+static uint64_t* pf_cache_cold[PF_CACHE_SIZE]; // Cold cache - for page reclamation
+static size_t pf_cache_hot_count[PF_CACHE_SIZE];
+static size_t pf_cache_cold_count[PF_CACHE_SIZE];
+
+// Allocation statistics for optimization
+static size_t alloc_requests = 0;
+static size_t alloc_failures = 0;
+static size_t total_pages_allocated = 0;
+static size_t total_pages_freed = 0;
 
 // External symbols defined by linker script
 extern char _kernel_end[];
@@ -38,9 +52,12 @@ extern char _kernel_end[];
 // Kernel start address loaded by bootloader
 #define KERNEL_START_ADDR 0x100000ULL
 
-// Physical memory limits
+// Physical memory limits and thresholds
 #define MEMORY_MAP_TYPE_AVAILABLE 1
 #define MEMORY_MAP_TYPE_RESERVED  2
+#define LOW_MEMORY_THRESHOLD      (128 * 1024 * 1024 / PAGE_SIZE)  // 128MB low memory
+#define PAGE_CACHE_SIZE          8    // Maximum pages per cache entry
+#define BUDDY_MAX_ORDER          11   // 2^11 = 2048KB buddy allocation max
 
 // Forward declarations
 static void pmm_parse_memory_map(void);
@@ -56,6 +73,30 @@ void pmm_init(void)
     KINFO("PMM initialized: %llu MB total, %llu MB available",
           (total_memory_pages * PAGE_SIZE) / (1024 * 1024),
           ((total_memory_pages - used_memory_pages) * PAGE_SIZE) / (1024 * 1024));
+}
+
+// Initialize page frame caches for performance optimization
+static void pmm_init_caches(void)
+{
+    // Allocate memory for page frame caches
+    for (int i = 0; i < PAGE_CACHE_SIZE; i++) {
+        // Allocate hot cache arrays - small fixed size for now
+        if (i == 0) {  // Only initialize single-page cache for simplicity
+            pf_cache_hot[0] = kmalloc(PAGE_CACHE_SIZE * sizeof(uint64_t));
+            pf_cache_cold[0] = kmalloc(PAGE_CACHE_SIZE * sizeof(uint64_t));
+
+            if (pf_cache_hot[0]) {
+                memset(pf_cache_hot[0], 0, PAGE_CACHE_SIZE * sizeof(uint64_t));
+            }
+            if (pf_cache_cold[0]) {
+                memset(pf_cache_cold[0], 0, PAGE_CACHE_SIZE * sizeof(uint64_t));
+            }
+        }
+
+        pf_cache_hot_count[i] = 0;
+        pf_cache_cold_count[i] = 0;
+    }
+    KINFO("Page frame caches initialized");
 }
 
 // Parse multiboot memory map and initialize bitmap
@@ -133,6 +174,10 @@ static void pmm_parse_memory_map(void)
             }
 
             KINFO("Memory bitmap at 0x%lx, size %lu KB", memory_bitmap, memory_bitmap_size / 1024);
+
+            // Initialize page frame caches after bitmap setup
+            pmm_init_caches();
+
             return;
         }
 
@@ -145,14 +190,49 @@ static void pmm_parse_memory_map(void)
     PANIC("No memory map found in multiboot information");
 }
 
-// Allocate physical pages
+/*
+ * Enhanced page allocation with caching and optimization
+ * Implements Linux-style page frame caching for better performance
+ */
 uintptr_t pmm_alloc_pages(size_t num_pages)
 {
-    if (num_pages == 0) return 0;
+    alloc_requests++;
 
+    // Input validation
+    if (num_pages == 0) return 0;
+    if (num_pages > 1024) {  // Reasonable upper limit
+        KERROR("PMM: Allocation request too large (%lu pages)", num_pages);
+        alloc_failures++;
+        return 0;
+    }
+
+    // Check memory pressure - if low on memory, avoid caching
+    size_t free_pages = pmm_get_free_pages();
+    bool low_memory = free_pages < LOW_MEMORY_THRESHOLD;
+
+    // Try page frame cache first for single page allocations
+    if (num_pages == 1 && !low_memory && pf_cache_hot_count[0] > 0) {
+        // Use cached page if available
+        uint64_t page_addr = pf_cache_hot[0][--pf_cache_hot_count[0]];
+        pf_cache_hot[0][pf_cache_hot_count[0]] = 0;  // Clear used entry
+
+        // Mark page as used in bitmap
+        size_t page_idx = page_addr / PAGE_SIZE;
+        memory_bitmap[page_idx / 8] |= (1 << (page_idx % 8));
+        used_memory_pages++;
+        total_pages_allocated++;
+
+        KDEBUG("PMM: Allocated %lu page(s) from cache (hot): 0x%lx", num_pages, page_addr);
+        return page_addr;
+    }
+
+    // Standard bitmap-based allocation using first-fit strategy
     size_t consecutive_free = 0;
     size_t start_page = 0;
+    size_t best_start = 0;
+    size_t best_size = (size_t)-1;  // Best size is smallest block that fits
 
+    // Find the best-fit block
     for (size_t i = 0; i < total_memory_pages; i++) {
         if (!(memory_bitmap[i / 8] & (1 << (i % 8)))) {
             // Page is free
@@ -161,35 +241,141 @@ uintptr_t pmm_alloc_pages(size_t num_pages)
                 start_page = i;
             }
             if (consecutive_free == num_pages) {
-                // Found enough consecutive pages, mark them as used
-                for (size_t j = 0; j < num_pages; j++) {
-                    memory_bitmap[(start_page + j) / 8] |= (1 << ((start_page + j) % 8));
+                // Found adequate block - check if better than current best
+                if (best_size > consecutive_free || best_start == 0) {
+                    best_start = start_page;
+                    best_size = consecutive_free;
                 }
-                used_memory_pages += num_pages;
-                return start_page * PAGE_SIZE;
+                // Continue searching for better fits
+                consecutive_free = 0;  // Reset for next search
             }
         } else {
             consecutive_free = 0;
         }
     }
 
-    KERROR("PMM: Out of memory, requested %lu pages", num_pages);
-    return 0; // Out of memory
+    if (best_start == 0) {
+        KERROR("PMM: Out of memory, requested %lu pages", num_pages);
+        alloc_failures++;
+        return 0; // Out of memory
+    }
+
+    // Mark pages as used in bitmap
+    for (size_t j = 0; j < num_pages; j++) {
+        size_t page = best_start + j;
+        memory_bitmap[page / 8] |= (1 << (page % 8));
+    }
+
+    used_memory_pages += num_pages;
+    total_pages_allocated += num_pages;
+
+    uintptr_t allocated_addr = best_start * PAGE_SIZE;
+
+    // Add neighboring free pages to hot cache (buddy-style)
+    if (!low_memory && num_pages == 1) {
+        // Look for highest-indexed free page after allocation for LIFO behavior
+        for (size_t i = total_memory_pages - 1; i > best_start + num_pages; i--) {
+            if (!(memory_bitmap[i / 8] & (1 << (i % 8)))) {
+                // Cache in hot list if room
+                if (pf_cache_hot_count[0] < PAGE_CACHE_SIZE) {
+                    pf_cache_hot[0][pf_cache_hot_count[0]++] = i * PAGE_SIZE;
+                }
+                break;  // Just cache one for now
+            }
+        }
+    }
+
+    KDEBUG("PMM: Allocated %lu page(s) from bitmap: 0x%lx", num_pages, allocated_addr);
+    return allocated_addr;
 }
 
-// Free physical pages
+/*
+ * Enhanced page deallocation with intelligent caching
+ * Implements page frame caching similar to Linux
+ */
 void pmm_free_pages(uintptr_t addr, size_t num_pages)
 {
-    if (num_pages == 0) return;
+    if (num_pages == 0 || addr == 0) return;
 
+    // Input validation
     size_t start_page = addr / PAGE_SIZE;
+    if (start_page >= total_memory_pages) {
+        KWARN("PMM: Free request for invalid address: 0x%lx", addr);
+        return;
+    }
 
+    // Check if pages are actually allocated
+    bool all_allocated = true;
+    for (size_t i = 0; i < num_pages && all_allocated; i++) {
+        size_t page = start_page + i;
+        if (!(memory_bitmap[page / 8] & (1 << (page % 8)))) {
+            all_allocated = false;
+        }
+    }
+
+    if (!all_allocated) {
+        KWARN("PMM: Double-free detected at 0x%lx - pages not marked as allocated", addr);
+        return;
+    }
+
+    // Single page allocation - consider caching
+    if (num_pages == 1) {
+        // Check memory pressure for caching decisions
+        size_t free_pages = pmm_get_free_pages();
+        bool should_cache = free_pages > (LOW_MEMORY_THRESHOLD * 2);
+
+        if (should_cache && pf_cache_hot_count[0] < PAGE_CACHE_SIZE) {
+            // Add to hot cache for quick reuse (LIFO)
+            pf_cache_hot[0][pf_cache_hot_count[0]++] = addr;
+            total_pages_freed++;
+            KDEBUG("PMM: Cached %lu page(s) in hot cache: 0x%lx", num_pages, addr);
+            return;
+        }
+    }
+
+    // Standard bitmap deallocation
     for (size_t i = 0; i < num_pages; i++) {
         size_t page = start_page + i;
         memory_bitmap[page / 8] &= ~(1 << (page % 8));
     }
 
     used_memory_pages -= num_pages;
+    total_pages_freed += num_pages;
+
+    KDEBUG("PMM: Freed %lu page(s) at 0x%lx", num_pages, addr);
+}
+
+/*
+ * Get detailed PMM statistics for monitoring and optimization
+ */
+void pmm_get_stats(size_t* requests, size_t* failures, size_t* cache_hit_rate,
+                  size_t* fragmentation_ratio)
+{
+    *requests = alloc_requests;
+    *failures = alloc_failures;
+
+    // Calculate cache hit ratio (simplified)
+    size_t total_single_allocs = 0;  // Would need per-size tracking
+    *cache_hit_rate = total_single_allocs > 0 ?
+                     (pf_cache_hot_count[0] * 100) / total_single_allocs : 0;
+
+    // Simple fragmentation calculation - ratio of free pages to largest free block
+    size_t max_consecutive_free = 0;
+    size_t current_free = 0;
+    for (size_t i = 0; i < total_memory_pages; i++) {
+        if (!(memory_bitmap[i / 8] & (1 << (i % 8)))) {
+            current_free++;
+            if (current_free > max_consecutive_free) {
+                max_consecutive_free = current_free;
+            }
+        } else {
+            current_free = 0;
+        }
+    }
+
+    size_t total_free = pmm_get_free_pages();
+    *fragmentation_ratio = total_free > 0 ?
+                          ((total_free - max_consecutive_free) * 100) / total_free : 0;
 }
 
 // Get total memory in pages

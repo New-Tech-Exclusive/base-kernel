@@ -13,7 +13,7 @@ typedef struct {
     uint8_t access;
     uint8_t granularity;
     uint8_t base_high;
-} __PACKED gdt_entry_t;
+} __attribute__((packed)) gdt_entry_t;
 
 // Extended GDT entry for 64-bit addressing - 16 bytes total
 typedef struct {
@@ -25,13 +25,13 @@ typedef struct {
     uint8_t base_high;
     uint32_t base_upper;
     uint32_t reserved;
-} __PACKED gdt_extended_entry_t;
+} __attribute__((packed)) gdt_extended_entry_t;
 
 // GDTR register structure for LGDT instruction
 typedef struct {
     uint16_t limit;
     uintptr_t base;
-} __PACKED gdt_pointer_t;
+} __attribute__((packed)) gdt_pointer_t;
 
 // Global GDT table and descriptor
 static gdt_entry_t gdt[5];

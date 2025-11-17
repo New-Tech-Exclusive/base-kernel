@@ -54,7 +54,11 @@ KERNEL_SRCS := $(wildcard src/kernel/*.c) \
                $(wildcard src/kernel/memory/*.c) \
                $(wildcard src/kernel/scheduler/*.c) \
                $(wildcard src/kernel/syscall/*.c) \
-               $(wildcard src/fs/*.c)
+               $(wildcard src/fs/*.c) \
+               $(wildcard src/api/*.c) \
+               src/events.c \
+               src/framebuffer.c \
+               src/display_server.c
 
 # Exclude stubs.c and scheduler_temp.c since we have real implementations now
 KERNEL_SRCS := $(filter-out src/kernel/stubs.c src/kernel/scheduler_temp.c, $(KERNEL_SRCS))

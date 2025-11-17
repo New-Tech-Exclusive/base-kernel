@@ -12,6 +12,12 @@ typedef enum {
     TASK_TERMINATED
 } task_state_t;
 
+typedef struct vm_area_struct {
+    uintptr_t start;        // Virtual start address
+    size_t size;           // Size of mapping
+    struct vm_area_struct* next; // Linked list
+} vm_area_t;
+
 typedef struct task {
     uint64_t id;               // Unique task identifier
     task_state_t state;        // Current task state
@@ -19,6 +25,8 @@ typedef struct task {
     uint64_t* stack_bottom;    // Stack base address
     struct task* next;         // Next task in ready queue
     uint64_t ticks_remaining;  // Remaining time slice ticks
+    // Memory management for fork() support
+    vm_area_t* vm_areas;       // Process address space mappings
 } task_t;
 
 // Scheduler state variables
@@ -269,6 +277,61 @@ static void scheduler_switch_to_task(task_t* task)
     // Full implementation: restore registers, switch stacks
     // Current version: interrupt return handles context restoration
     KINFO("Switched to task %u", task->id);
+}
+
+/*
+ * Implement fork() syscall - create a copy of current task
+ * Returns child PID to parent, 0 to child, -1 on error
+ */
+uint64_t scheduler_create_task_fork(void)
+{
+    if (!current_task) {
+        KERROR("No current task to fork from");
+        return -1;
+    }
+
+    KDEBUG("Forking task %u", current_task->id);
+
+    // Allocate child task structure
+    task_t* child_task = kmalloc(sizeof(task_t));
+    if (!child_task) {
+        KERROR("Failed to allocate child task structure");
+        return -1;
+    }
+
+    // Copy parent task structure
+    memcpy(child_task, current_task, sizeof(task_t));
+    child_task->id = next_task_id++;
+    child_task->state = TASK_READY;
+    child_task->next = NULL;
+    child_task->ticks_remaining = TASK_TIME_SLICE;
+
+    // Allocate new stack for child (simplified - in real fork we'd do COW)
+    void* child_stack = kmalloc(KERNEL_STACK_SIZE);
+    if (!child_stack) {
+        KERROR("Failed to allocate child stack");
+        kfree(child_task);
+        return -1;
+    }
+
+    // Copy parent's stack content
+    memcpy(child_stack, (void*)current_task->stack_bottom, KERNEL_STACK_SIZE);
+
+    // Set up child's stack pointers
+    uintptr_t stack_offset = (uintptr_t)child_stack - (uintptr_t)current_task->stack_bottom;
+    child_task->stack_bottom = child_stack;
+    child_task->stack_top = (void*)((uintptr_t)current_task->stack_top + stack_offset);
+
+    total_tasks++;
+
+    // Add child to ready queue
+    scheduler_add_to_ready_queue(child_task);
+
+    KINFO("Fork successful: parent %u -> child %u (total tasks: %u)",
+          current_task->id, child_task->id, total_tasks);
+
+    // Return child PID to parent
+    return child_task->id;
 }
 
 // Get current task ID

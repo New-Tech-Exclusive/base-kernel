@@ -5,13 +5,16 @@
  * Implements virtual memory management
  */
 
+// Standard page size for x86_64
+#define PAGE_SIZE         4096
+
 // Page table entry flags
 #define PTE_PRESENT       0x001
 #define PTE_WRITABLE      0x002
 #define PTE_USER          0x004
 #define PTE_ACCESSED      0x020
 #define PTE_DIRTY         0x040
-#define PTE_PAGE_SIZE     0x080
+#define PTE_PAGE_SIZE_BIT 0x080  // Rename to avoid confusion
 #define PTE_GLOBAL        0x100
 #define PTE_PAT           0x080
 #define PTE_NX            (1ULL << 63)
@@ -87,7 +90,7 @@ static void paging_create_kernel_tables(void)
 
     // Create 512 page directory entries (2MB each = 1GB total)
     for (int i = 0; i < 512; i++) {
-        pd_lower[i] = (i * 0x200000ULL) | PTE_PRESENT | PTE_WRITABLE | PTE_PAGE_SIZE;
+        pd_lower[i] = (i * 0x200000ULL) | PTE_PRESENT | PTE_WRITABLE | PTE_PAGE_SIZE_BIT;
     }
 
     // Identity map first 1GB
@@ -192,7 +195,7 @@ bool vmm_unmap_page(uintptr_t virtual_addr)
 // Allocate a new page table page using PMM
 static pte_t* paging_alloc_page_table(void)
 {
-    uintptr_t phys_addr = pmm_alloc_pages(1);
+    uintptr_t phys_addr = (uintptr_t)pmm_alloc_page();
     if (!phys_addr) {
         KERROR("Failed to allocate page table page");
         return NULL;
@@ -218,7 +221,7 @@ uintptr_t paging_get_physical_address(uintptr_t virtual_addr)
     if (!(pdpt[pdpt_index] & PTE_PRESENT))
         return 0;
 
-    if (pdpt[pdpt_index] & PTE_PAGE_SIZE) {
+    if (pdpt[pdpt_index] & PTE_PAGE_SIZE_BIT) {
         // 1GB page
         return (pdpt[pdpt_index] & ~0x3FFFFFFFULL) + (virtual_addr & 0x3FFFFFFFULL);
     }
@@ -227,7 +230,7 @@ uintptr_t paging_get_physical_address(uintptr_t virtual_addr)
     if (!(pd[pd_index] & PTE_PRESENT))
         return 0;
 
-    if (pd[pd_index] & PTE_PAGE_SIZE) {
+    if (pd[pd_index] & PTE_PAGE_SIZE_BIT) {
         // 2MB page
         return (pd[pd_index] & ~0x1FFFFFULL) + (virtual_addr & 0x1FFFFFULL);
     }
