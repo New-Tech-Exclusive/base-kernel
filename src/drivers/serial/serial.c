@@ -40,10 +40,10 @@ static int serial_is_transmit_empty(void)
 }
 
 /* Write a character to serial port */
-void serial_write(char c)
+void serial_write(uint8_t byte)
 {
     while (!serial_is_transmit_empty());
-    outb(COM1_PORT, c);
+    outb(COM1_PORT, byte);
 }
 
 /* Write a string to serial port */

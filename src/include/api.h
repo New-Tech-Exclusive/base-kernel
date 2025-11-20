@@ -42,6 +42,11 @@
 typedef struct memory_pool memory_pool_t;
 typedef struct memory_tracker memory_tracker_t;
 
+// File and directory types
+typedef struct api_file file_t;
+typedef struct dir dir_t;
+typedef struct dir_entry dir_entry_t;
+
 // High-level memory allocation with tracking
 void* kmalloc_tracked(size_t size, const char* tag);
 void* krealloc_tracked(void* ptr, size_t size, const char* tag);
@@ -54,12 +59,7 @@ void memory_pool_free(memory_pool_t* pool, void* ptr);
 void memory_pool_destroy(memory_pool_t* pool);
 
 // Memory statistics and debugging
-typedef struct {
-    size_t total_allocated;
-    size_t peak_usage;
-    size_t allocations;
-    size_t deallocations;
-} memory_stats_t;
+// memory_stats_t is defined in kernel.h
 
 void memory_get_stats(memory_stats_t* stats);
 void memory_dump_leaks(void);
@@ -82,13 +82,38 @@ void smart_ptr_cleanup(smart_ptr_t* sp);
 void auto_kfree(void* ptr);
 void auto_smart_cleanup(smart_ptr_t* sp);
 
+// Error handling
+typedef enum {
+    KERNEL_SUCCESS = 0,
+    KERNEL_ERROR_INVALID_ARGUMENT = -1,
+    KERNEL_ERROR_NOT_FOUND = -2,
+    KERNEL_ERROR_PERMISSION_DENIED = -3,
+    KERNEL_ERROR_OUT_OF_MEMORY = -4,
+    KERNEL_ERROR_IO_ERROR = -5,
+    KERNEL_ERROR_NOT_IMPLEMENTED = -6,
+    KERNEL_ERROR_TIMEOUT = -7,
+    KERNEL_ERROR_BUSY = -8,
+    KERNEL_ERROR_EXISTS = -9,
+    KERNEL_ERROR_TOO_MANY = -10,
+    KERNEL_ERROR_FILE_NOT_FOUND = -11,
+    KERNEL_ERROR_DIRECTORY_NOT_EMPTY = -12,
+    KERNEL_ERROR_FILE_TOO_BIG = -13,
+    KERNEL_ERROR_NO_SPACE = -14
+} kernel_error_t;
+
+const char* kernel_error_string(kernel_error_t error);
+
 // ============================================================================
 // ENHANCED PROCESS MANAGEMENT API
 // ============================================================================
 
 // Process creation and management
 typedef pid_t process_t;
+typedef pid_t pgid_t;  // Process group ID
 typedef void (*process_entry_t)(void* arg);
+
+// Process state (maps to task_state_t)
+typedef task_state_t process_state_t;
 
 // Process information structure
 typedef struct {
@@ -146,7 +171,7 @@ const char* process_get_env(const char* key);
 // ============================================================================
 
 // File operations with automatic resource management
-typedef struct file file_t;
+// file_t is defined earlier as struct api_file
 typedef int64_t file_mode_t;
 
 // File open modes (more intuitive than raw flags)
@@ -230,8 +255,9 @@ typedef struct window_config {
 } window_config_t;
 
 // High-level graphics API
-window_id_t window_create(const window_config_t* config);
-void window_destroy(window_id_t window);
+// Window management API (basic functions in kernel.h)
+// window_create and window_destroy are defined in kernel.h with different signatures
+// Using kernel.h versions
 void window_show(window_id_t window);
 void window_hide(window_id_t window);
 void window_move(window_id_t window, int x, int y);
@@ -259,45 +285,10 @@ void graphics_draw_border(const graphics_context_t* ctx, int x, int y, int w, in
 // ENHANCED EVENT SYSTEM API
 // ============================================================================
 
-// Event types and structures
-typedef enum {
-    EVENT_NONE,
-    EVENT_KEYBOARD,
-    EVENT_MOUSE,
-    EVENT_WINDOW,
-    EVENT_SYSTEM,
-    EVENT_CUSTOM
-} event_type_t;
+// Event types and structures (defined in kernel.h)
+// event_type_t is defined in kernel.h
 
-typedef struct {
-    event_type_t type;
-    uint32_t timestamp;
-    union {
-        struct {
-            uint32_t keycode;
-            uint32_t modifiers;
-            bool pressed;
-            bool repeat;
-        } keyboard;
-
-        struct {
-            int x, y;
-            int delta_x, delta_y;
-            uint32_t buttons;
-            int wheel;
-        } mouse;
-
-        struct {
-            window_id_t window_id;
-            enum { WIN_CLOSE, WIN_RESIZE, WIN_MOVE, WIN_FOCUS } action;
-        } window;
-
-        struct {
-            int signal;
-            int pid;
-        } system;
-    } data;
-} event_t;
+// event_t is defined in kernel.h
 
 // Event queue API
 typedef struct event_queue event_queue_t;
@@ -323,26 +314,7 @@ void event_loop_quit(void);
 // ENHANCED ERROR HANDLING
 // ============================================================================
 
-// Error codes with string representations
-typedef enum kernel_error {
-    KERNEL_SUCCESS = 0,
-    KERNEL_ERROR_INVALID_ARGUMENT = -1,
-    KERNEL_ERROR_NOT_FOUND = -2,
-    KERNEL_ERROR_PERMISSION_DENIED = -3,
-    KERNEL_ERROR_OUT_OF_MEMORY = -4,
-    KERNEL_ERROR_IO_ERROR = -5,
-    KERNEL_ERROR_NOT_IMPLEMENTED = -6,
-    KERNEL_ERROR_TIMEOUT = -7,
-    KERNEL_ERROR_BUSY = -8,
-    KERNEL_ERROR_EXISTS = -9,
-    KERNEL_ERROR_TOO_MANY = -10,
-    KERNEL_ERROR_FILE_NOT_FOUND = -11,
-    KERNEL_ERROR_DIRECTORY_NOT_EMPTY = -12,
-    KERNEL_ERROR_FILE_TOO_BIG = -13,
-    KERNEL_ERROR_NO_SPACE = -14,
-} kernel_error_t;
-
-const char* kernel_error_string(kernel_error_t error);
+// Error codes are defined earlier in this file (lines 85-104)
 
 // Result type for better error handling
 typedef struct {

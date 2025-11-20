@@ -4,15 +4,34 @@
  */
 
 #include "kernel.h"
+#include "api.h"
+
+// File operation constants (if not defined elsewhere)
+#ifndef O_RDONLY
+#define O_RDONLY    0x0000
+#define O_WRONLY    0x0001
+#define O_RDWR      0x0002
+#define O_CREAT     0x0040
+#define O_TRUNC     0x0200
+#define O_APPEND    0x0400
+#define O_EXEC      0x1000
+#endif
+
+#ifndef SEEK_SET
+#define SEEK_SET    0
+#define SEEK_CUR    1
+#define SEEK_END    2
+#endif
 
 // ============================================================================
 // FILE OPERATIONS
 // ============================================================================
 
-struct file {
+// Internal file structure - use different name to avoid conflict with vfs.h
+struct api_file {
     int fd;          // File descriptor from syscall layer
     char path[256];  // Original path for debugging
-    file_open_mode_t mode;
+    int mode_flags;  // Store mode as int flags
 };
 
 file_t* file_open(const char* path, file_open_mode_t mode) {
@@ -47,7 +66,7 @@ file_t* file_open(const char* path, file_open_mode_t mode) {
 
     file->fd = fd;
     str_copy(file->path, path, sizeof(file->path));
-    file->mode = mode;
+    file->mode_flags = mode;
 
     return file;
 }
@@ -188,6 +207,8 @@ struct dir {
     size_t entry_index;
     // In a real implementation, this would contain directory structure
 };
+
+// dir_entry_t is defined in api.h
 
 dir_t* dir_open(const char* path) {
     if (!path) return NULL;

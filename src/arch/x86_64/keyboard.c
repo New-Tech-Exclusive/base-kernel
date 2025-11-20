@@ -31,7 +31,7 @@
 #define KEYBOARD_CMD_RESET   0xFF
 
 // Scancode set 1 translation table (US layout)
-static const char scancode_to_ascii[128] = {
+static const char scancode_to_ascii[256] = {
     0, 0, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', '\b', '\t',
     'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', '\n', 0, 'a', 's',
     'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '`', 0, '\\', 'z', 'x', 'c', 'v',
@@ -54,8 +54,8 @@ char last_key = 0;
 static void keyboard_handle_keypress(uint8_t scancode);
 static void keyboard_handle_keyrelease(uint8_t scancode);
 static void keyboard_send_command(uint8_t command);
-static void keyboard_send_data(uint8_t data);
-static uint8_t keyboard_read_data(void);
+// static void keyboard_send_data(uint8_t data);
+// static uint8_t keyboard_read_data(void);
 
 // Initialize the keyboard
 void keyboard_init(void)
@@ -183,6 +183,8 @@ static void keyboard_send_command(uint8_t command)
 }
 
 // Send data to keyboard
+/*
+// Send data to keyboard
 static void keyboard_send_data(uint8_t data)
 {
     // Wait for keyboard to be ready
@@ -196,7 +198,10 @@ static void keyboard_send_data(uint8_t data)
     // Wait a bit
     io_wait();
 }
+*/
 
+// Read data from keyboard (with timeout)
+/*
 // Read data from keyboard (with timeout)
 static uint8_t keyboard_read_data(void)
 {
@@ -212,3 +217,4 @@ static uint8_t keyboard_read_data(void)
 
     return inb(KEYBOARD_DATA);
 }
+*/

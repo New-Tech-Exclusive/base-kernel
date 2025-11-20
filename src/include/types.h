@@ -151,4 +151,8 @@ typedef struct file_system_type filesystem_t;
 #define ALIGN_UP(val, align) (((val) + (align) - 1) & ~((align) - 1))
 #define ALIGN_DOWN(val, align) ((val) & ~((align) - 1))
 
+/* Compiler attributes */
+#define __NORETURN __attribute__((noreturn))
+#define __PACKED   __attribute__((packed))
+
 #endif /* _TYPES_H */

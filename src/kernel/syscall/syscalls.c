@@ -17,15 +17,6 @@
 // Commonly used return values
 #define SUCCESS         0
 
-// Define types for shared memory (simplified)
-typedef int key_t;       // IPC key type
-typedef int pid_t;       // Process ID type
-
-// Shared memory structs
-struct shmid_ds {
-    int dummy; // Placeholder
-};
-
 // Shared memory constants
 #define IPC_PRIVATE ((key_t)0)    // Private key for new segments
 #define IPC_RMID    0             // Remove segment
@@ -63,19 +54,7 @@ typedef struct {
 #define MAX_SHM_ATTACHMENTS 8
 static shm_attachment_t shm_attachments[MAX_SHM_ATTACHMENTS];
 
-// Event system
-extern int64_t sys_event_create_queue(void);
-extern int64_t sys_event_destroy_queue(int queue_id);
-extern int64_t sys_event_get_next(int queue_id, void* event_out);
-
-// Framebuffer/display system
-extern int64_t sys_get_display_info(void* info);
-extern int64_t sys_window_create(int x, int y, int width, int height);
-extern int64_t sys_window_destroy(int window_id);
-extern int64_t sys_window_composite(int window_id);
-extern int64_t sys_framebuffer_access(int window_id, void* buffer, void* width, void* height);
-extern int64_t sys_draw_rect(int window_id, int x, int y, int w, int h, uint32_t color);
-extern int64_t sys_draw_circle(int window_id, int center_x, int center_y, int radius, uint32_t color);
+// These functions are declared in kernel.h with correct signatures
 
 // System call implementations
 
@@ -226,13 +205,13 @@ int64_t sys_shmdt(const void* shmaddr)
 }
 
 // File operations (will be implemented with VFS later)
-int64_t sys_read(uint64_t fd, char* buf, size_t count)
+size_t sys_read(uint64_t fd, char* buf, size_t count)
 {
     // For now, only handle stdin (fd 0) via keyboard or serial
     return -ENOSYS;
 }
 
-int64_t sys_write(uint64_t fd, const char* buf, size_t count)
+size_t sys_write(uint64_t fd, const char* buf, size_t count)
 {
     // Handle stdout (fd 1) and stderr (fd 2) via serial
     if (fd == 1 || fd == 2) {
@@ -245,18 +224,19 @@ int64_t sys_write(uint64_t fd, const char* buf, size_t count)
     return -ENOSYS;
 }
 
-int64_t sys_open(const char* filename, int flags, umode_t mode)
+int sys_open(const char* filename, int flags, umode_t mode)
 {
     return -ENOSYS;
 }
 
-int64_t sys_close(uint64_t fd)
+int sys_close(uint64_t fd)
 {
     return -ENOSYS;
 }
 
-int64_t sys_lseek(uint64_t fd, off_t offset)
+int64_t sys_lseek(uint64_t fd, off_t offset, int whence)
 {
+    (void)whence; // Unused for now
     return -ENOSYS;
 }
 

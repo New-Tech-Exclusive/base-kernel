@@ -75,6 +75,18 @@ uint64_t timer_get_ticks(void)
     return timer_ticks;
 }
 
+// System call wrapper
+uint64_t sys_get_ticks(void)
+{
+    return timer_ticks;
+}
+
+// Get monotonic time in milliseconds
+uint64_t time_monotonic_ms(void)
+{
+    return (timer_ticks * 1000) / TIMER_FREQUENCY;
+}
+
 // Sleep for specified number of milliseconds
 void timer_sleep(uint32_t milliseconds)
 {

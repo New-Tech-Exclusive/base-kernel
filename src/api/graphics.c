@@ -4,34 +4,14 @@
  */
 
 #include "kernel.h"
+#include "api.h"
 
 // ============================================================================
 // WINDOW MANAGEMENT
 // ============================================================================
 
-window_id_t window_create(const window_config_t* config) {
-    if (!config) return 0;
-
-    // Connect to display server
-    int64_t status = sys_connect_display_server();
-    if (status < 0) {
-        KERROR("Failed to connect to display server: %ld", status);
-        return 0;
-    }
-
-    // Create window through display protocol
-    int window_id = sys_display_create_window(config->x, config->y,
-                                            config->width, config->height,
-                                            config->title);
-
-    return (window_id_t)window_id;
-}
-
-void window_destroy(window_id_t window) {
-    if (window == 0) return;
-
-    sys_display_destroy_window((int)window);
-}
+// Note: window_create and window_destroy are defined in kernel.h with different signatures
+// We use those versions instead of redefining them here
 
 void window_show(window_id_t window) {
     // Windows are shown by default in our implementation
@@ -89,7 +69,7 @@ void graphics_end_frame(window_id_t window) {
     if (window == 0) return;
 
     // Tell display server to composite/update this window
-    sys_display_composite_window((int)window);
+    sys_window_composite((int)window);
 }
 
 // ============================================================================

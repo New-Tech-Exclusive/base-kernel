@@ -8,6 +8,19 @@
  * Linux-compatible inode, dentry, superblock structures
  */
 
+// Forward declarations
+struct writeback_control;
+struct kstatfs;
+struct vfsmount;
+struct seq_file;
+struct list_head;
+struct qstr;
+struct dquot;
+struct page;
+struct module;
+struct hlist_head;
+struct lock_class_key;
+
 // File types
 typedef enum {
     VFS_TYPE_REGULAR,
@@ -218,18 +231,5 @@ struct path {
 };
 
 // Simplified types for basic implementation (defined in types.h)
-
-// Forward declarations for dependencies
-struct writeback_control;
-struct kstatfs;
-struct vfsmount;
-struct seq_file;
-struct list_head;
-struct qstr;
-struct dquot;
-struct page;
-struct module;
-struct hlist_head;
-struct lock_class_key;
 
 #endif /* _VFS_H */

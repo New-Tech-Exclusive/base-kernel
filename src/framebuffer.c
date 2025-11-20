@@ -407,10 +407,12 @@ void window_composite(int window_id)
 // ============================================================================
 
 // Get display information for clients
-int64_t sys_get_display_info(display_info_t* info)
+int64_t sys_get_display_info(uint32_t* width, uint32_t* height, uint32_t* bpp)
 {
-    if (!info) return -1;
-    memcpy(info, &display_info, sizeof(display_info_t));
+    if (!width || !height || !bpp) return -1;
+    *width = display_info.width;
+    *height = display_info.height;
+    *bpp = display_info.bpp;
     return 0;
 }
 
@@ -433,24 +435,17 @@ int64_t sys_window_composite(int window_id)
 }
 
 // Framebuffer access syscall
-int64_t sys_framebuffer_access(int window_id, volatile uint8_t** buffer, int* width, int* height)
+int64_t sys_framebuffer_access(void** framebuffer, uint32_t* width, uint32_t* height, uint32_t* bpp)
 {
-    if (!buffer || !width || !height) return -1;
-
-    volatile uint8_t* win_buffer = window_get_buffer(window_id);
-    if (!win_buffer) return -1;
-
-    // Find window dimensions
-    for (int i = 0; i < MAX_WINDOWS; i++) {
-        if (windows[i].id == window_id) {
-            *buffer = win_buffer;
-            *width = windows[i].width;
-            *height = windows[i].height;
-            return 0;
-        }
-    }
-
-    return -1;
+    if (!framebuffer || !width || !height || !bpp) return -1;
+    
+    // For now, return the main framebuffer
+    // In a real implementation, this would return a window-specific buffer
+    *framebuffer = (void*)fb_buffer;
+    *width = current_width;
+    *height = current_height;
+    *bpp = current_bpp;
+    return 0;
 }
 
 // Drawing primitives syscalls
@@ -467,3 +462,13 @@ int64_t sys_draw_circle(int window_id, int center_x, int center_y, int radius, u
     framebuffer_draw_circle(center_x + 200, center_y + 200, radius, color);
     return 0;
 }
+
+// Simple text rendering stub
+void framebuffer_draw_text(int x, int y, const char* text, uint32_t color)
+{
+    // Stub implementation - in a real kernel, this would render actual text
+    // For now, just draw a colored rectangle to indicate text position
+    (void)text; // Unused for now
+    framebuffer_fill_rect(x, y, 8, 12, color);
+}
+

@@ -85,7 +85,7 @@ static int net_init_demo(void) {
     return 0;
 }
 
-void vfs_init(void)
+int vfs_init(void)
 {
     KINFO("Initializing Virtual File System and Networking Stack...");
 
@@ -111,6 +111,14 @@ void vfs_init(void)
     }
 
     KINFO("Advanced filesystem and networking demonstrations initialized");
+    return 0;
+}
+
+// Initialize list head (utility function)
+void INIT_LIST_HEAD(struct list_head* list)
+{
+    list->next = list;
+    list->prev = list;
 }
 
 // Register a filesystem type
@@ -291,12 +299,6 @@ struct dentry* vfs_path_lookup(const char* pathname)
     return NULL;
 }
 
-// Initialize list head (utility function)
-void INIT_LIST_HEAD(struct list_head* list)
-{
-    list->next = list;
-    list->prev = list;
-}
 
 // Filesystem mount point structure (simplified)
 struct vfsmount {

@@ -4,21 +4,17 @@
  */
 
 #include "kernel.h"
+#include "api.h"
+
+// Forward declarations for static functions
+static void process_group_remove(pgid_t pgid);
+static int process_unset_env(const char* key);
 
 // ============================================================================
 // PROCESS INFORMATION
 // ============================================================================
 
-typedef struct {
-    pid_t pid;
-    const char* name;
-    process_state_t state;
-    size_t stack_size;
-    int priority;
-    uint64_t creation_time;
-    uint64_t cpu_time;
-    size_t memory_used;
-} process_info_t;
+// process_info_t is defined in api.h
 
 // High-level process creation
 process_t process_create(process_entry_t entry, void* arg, process_attr_t* attr) {

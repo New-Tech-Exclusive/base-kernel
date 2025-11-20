@@ -18,16 +18,9 @@ static pid_t display_server_pid = 0;
 static int display_server_running = 0;
 
 // Window manager state
-typedef struct {
-    int window_id;
-    int x, y, width, height;
-    int visible;
-    pid_t owner_pid;
-    char title[64];
-} wm_window_t;
+// wm_window_t is defined in api.h
 
-#define MAX_WM_WINDOWS 32
-static wm_window_t wm_windows[MAX_WM_WINDOWS];
+wm_window_t wm_windows[MAX_WM_WINDOWS];
 
 // Display protocol message types
 typedef enum {
@@ -215,6 +208,14 @@ void route_mouse_event(int32_t x, int32_t y, uint32_t buttons, int32_t wheel)
 // DISPLAY SERVER MAIN LOOP
 // ============================================================================
 
+// Stub for system_get_info if not defined elsewhere
+void system_get_info(system_info_t* info) {
+    if (!info) return;
+    info->display.width = 1024;
+    info->display.height = 768;
+    info->display.bpp = 32;
+}
+
 int display_server_main(void)
 {
     KINFO("==========================================");
@@ -266,7 +267,9 @@ int display_server_main(void)
         .fullscreen = true
     };
 
-    window_id_t server_window = window_create(&server_cfg);
+    window_id_t server_window = window_create(server_cfg.x, server_cfg.y, 
+                                            server_cfg.width, server_cfg.height, 
+                                            display_server_pid);
 
     if (server_window > 0) {
         // Draw to server window using new API
@@ -389,7 +392,7 @@ int client_composite_window(int window_id)
 // SERVER INITIALIZATION
 // ============================================================================
 
-int display_server_init(void)
+void display_server_init(void)
 {
     KINFO("Starting display server process...");
 
@@ -410,14 +413,14 @@ int display_server_init(void)
             sys_yield();
         }
 
-        return 0;
+        return;
     } else {
         KERROR("Failed to start display server process");
-        return -1;
+        return;
     }
 
     // Should not reach here
-    return -1;
+    return;
 }
 
 // ============================================================================

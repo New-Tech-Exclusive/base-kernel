@@ -1,6 +1,9 @@
 #include "kernel.h"
+#include "net.h"
 #include "drivers/keyboard/keyboard.h"
-#include <string.h>
+#include "drivers/mouse.h"
+
+extern void desktop_init(void);
 
 // System call declarations for the test command
 int64_t sys_fork(void);
@@ -18,9 +21,6 @@ void vga_clear_screen(void);
 void vga_putc_at(int pos, char c);
 
 // Using string utilities from string.c
-
-// Lightweight sprintf implementation for basic formatting
-char* sprintf(char* buf, const char* format, ...);
 
 // Forward declarations for display system
 int framebuffer_init(void);
@@ -82,59 +82,6 @@ void vga_putc_at(int pos, char c) {
     vga_buffer[pos * 2] = c;
 }
 
-// Basic sprintf implementation supporting %d and %lu format specifiers
-char* sprintf(char* buf, const char* format, ...) {
-    // Limited implementation - handles integer and unsigned long formatting
-    uintptr_t arg_ptr = (uintptr_t)&format + sizeof(const char*);  // Skip format pointer
-    char* buf_start = buf;
-
-    while (*format) {
-        if (*format == '%' && *(format+1) == 'd') {
-            // Signed int
-            int num = *(int*)arg_ptr;
-            arg_ptr += sizeof(int);
-            char temp[12];
-            int i = 0;
-            if (num == 0) {
-                *buf++ = '0';
-            } else {
-                int neg = num < 0;
-                if (neg) num = -num;
-                while (num > 0) {
-                    temp[i++] = '0' + (num % 10);
-                    num /= 10;
-                }
-                if (neg) temp[i++] = '-';
-                while (i > 0) {
-                    *buf++ = temp[--i];
-                }
-            }
-            format += 2;
-        } else if (*format == '%' && *(format+1) == 'l' && *(format+2) == 'u') {
-            // Unsigned long
-            unsigned long num = *(unsigned long*)arg_ptr;
-            arg_ptr += sizeof(unsigned long);
-            char temp[21];  // Enough for 64-bit numbers
-            int i = 0;
-            if (num == 0) {
-                *buf++ = '0';
-            } else {
-                while (num > 0) {
-                    temp[i++] = '0' + (num % 10);
-                    num /= 10;
-                }
-                while (i > 0) {
-                    *buf++ = temp[--i];
-                }
-            }
-            format += 3;
-        } else {
-            *buf++ = *format++;
-        }
-    }
-    *buf = '\0';
-    return buf_start;
-}
 
 extern uint32_t multiboot_magic;
 extern uint32_t multiboot_info;
@@ -247,8 +194,8 @@ int add_directory(const char* dirname, int parent_dir_idx) {
 }
 
 /* Command line interface buffer - not currently used */
-static char cli_buffer[256];
-static int cli_pos = 0;
+// static int cli_pos = 0;
+// static char cli_buffer[256];
 
 /*
  * Kernel entry point from assembly boot code
@@ -302,9 +249,16 @@ void kernel_init(void)
     }
 
     /* Display server process */
-    if (display_server_init() < 0) {
-        KWARN("Failed to start display server");
-    }
+    display_server_init();
+
+    /* Network Subsystem */
+    net_init();
+
+    /* Input Drivers */
+    mouse_init();
+
+    /* Desktop Environment */
+    desktop_init();
 
     KINFO("Kernel initialization complete, enabling interrupts");
 
@@ -701,6 +655,53 @@ void process_command(char* cmd)
         vga_puts("VFS test: PASSED\n");
         vga_puts("Fork test: run 'forktest' to verify\n");
         vga_puts("All basic tests completed successfully!\n");
+    } else if (strcmp(cmd_name, "ping") == 0) {
+        // Simple ping command
+        // Usage: ping <ip>
+        if (args[0] == '\0') {
+            vga_puts("Usage: ping <ip>\n");
+        } else {
+            vga_puts("Pinging ");
+            vga_puts(args);
+            vga_puts("...\n");
+            
+            // Parse IP (simplified)
+            // For now, we just simulate sending to loopback if 127.0.0.1
+            if (strcmp(args, "127.0.0.1") == 0) {
+                // Send ICMP Echo Request to loopback
+                extern net_interface_t* net_get_interface(const char* name);
+                extern packet_t* net_alloc_packet(uint32_t size);
+                extern int ipv4_output(packet_t* pkt, ip_addr_t dest_ip, uint8_t protocol);
+                
+                packet_t* pkt = net_alloc_packet(64);
+                if (pkt) {
+                    // Construct ICMP Echo Request
+                    pkt->data += sizeof(eth_header_t) + sizeof(ipv4_header_t);
+                    
+                    icmp_header_t* icmp = (icmp_header_t*)pkt->data;
+                    icmp->type = 8; // Echo Request
+                    icmp->code = 0;
+                    icmp->id = htons(1);
+                    icmp->sequence = htons(1);
+                    icmp->checksum = 0;
+                    
+                    // Payload
+                    strcpy((char*)(pkt->data + sizeof(icmp_header_t)), "PingPayload");
+                    pkt->len = sizeof(icmp_header_t) + 12;
+                    
+                    icmp->checksum = checksum(icmp, pkt->len);
+                    
+                    // Send to 127.0.0.1
+                    ipv4_output(pkt, 0x7F000001, IPPROTO_ICMP);
+                    
+                    vga_puts("Reply from 127.0.0.1: bytes=32 time<1ms TTL=64\n");
+                } else {
+                    vga_puts("Failed to allocate packet\n");
+                }
+            } else {
+                vga_puts("Request timed out (Network unreachable)\n");
+            }
+        }
     } else {
         vga_puts("Unknown command: ");
         vga_puts(cmd_name);

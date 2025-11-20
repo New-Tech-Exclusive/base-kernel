@@ -389,3 +389,10 @@ size_t pmm_get_free_pages(void)
 {
     return total_memory_pages - used_memory_pages;
 }
+
+// Allocate a single page (wrapper for pmm_alloc_pages)
+uintptr_t pmm_alloc_page(void)
+{
+    return pmm_alloc_pages(1);
+}
+

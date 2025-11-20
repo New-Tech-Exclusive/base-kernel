@@ -58,7 +58,13 @@ KERNEL_SRCS := $(wildcard src/kernel/*.c) \
                $(wildcard src/api/*.c) \
                src/events.c \
                src/framebuffer.c \
-               src/display_server.c
+               src/display_server.c \
+               src/desktop.c \
+               src/net/net_core.c \
+               src/net/ethernet.c \
+               src/net/ipv4.c \
+               src/net/udp.c \
+               src/net/tcp.c
 
 # Exclude stubs.c and scheduler_temp.c since we have real implementations now
 KERNEL_SRCS := $(filter-out src/kernel/stubs.c src/kernel/scheduler_temp.c, $(KERNEL_SRCS))
@@ -66,7 +72,8 @@ KERNEL_SRCS := $(filter-out src/kernel/stubs.c src/kernel/scheduler_temp.c, $(KE
 DRIVER_SRCS := $(wildcard src/drivers/*.c) \
                $(wildcard src/drivers/video/*.c) \
                $(wildcard src/drivers/serial/*.c) \
-               $(wildcard src/drivers/keyboard/*.c)
+               $(wildcard src/drivers/keyboard/*.c) \
+               src/drivers/mouse/mouse.c
 
 SRCS := $(BOOT_SRCS) $(ARCH_SRCS) $(KERNEL_SRCS) $(DRIVER_SRCS)
 

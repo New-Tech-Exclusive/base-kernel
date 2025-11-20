@@ -4,6 +4,7 @@
  */
 
 #include "kernel.h"
+#include "api.h"
 
 // ============================================================================
 // EVENT QUEUE IMPLEMENTATION
@@ -190,7 +191,7 @@ void event_send_to_window(window_id_t window, const event_t* event) {
 
     // Search through window manager
     extern wm_window_t wm_windows[];  // From display server
-    extern int MAX_WM_WINDOWS;
+
 
     for (int i = 0; i < MAX_WM_WINDOWS; i++) {
         if (wm_windows[i].window_id == window) {
@@ -239,7 +240,7 @@ void event_loop_run(event_handler_t handler, void* user_data) {
         }
 
         // Yield CPU to other processes
-        sys_yield();
+        scheduler_yield();
 
         // Prevent busy waiting
         schedule_delay(1);
@@ -259,13 +260,12 @@ void event_loop_quit(void) {
 // Convert low-level input to high-level events
 void event_from_keyboard(uint32_t keycode, uint32_t modifiers, uint32_t state) {
     event_t event = {
-        .type = EVENT_KEYBOARD,
+        .type = EVENT_TYPE_KEYBOARD,
         .timestamp = time_monotonic_ms(),
         .data.keyboard = {
             .keycode = keycode,
             .modifiers = modifiers,
-            .pressed = (state > 0),
-            .repeat = false  // Would need to track for real repeat detection
+            .state = state
         }
     };
 
@@ -274,13 +274,11 @@ void event_from_keyboard(uint32_t keycode, uint32_t modifiers, uint32_t state) {
 
 void event_from_mouse(int32_t x, int32_t y, uint32_t buttons, int32_t wheel) {
     event_t event = {
-        .type = EVENT_MOUSE,
+        .type = EVENT_TYPE_MOUSE,
         .timestamp = time_monotonic_ms(),
         .data.mouse = {
             .x = x,
             .y = y,
-            .delta_x = 0,  // Would need to track motion deltas
-            .delta_y = 0,
             .buttons = buttons,
             .wheel = wheel
         }
@@ -289,15 +287,14 @@ void event_from_mouse(int32_t x, int32_t y, uint32_t buttons, int32_t wheel) {
     event_send_global(&event);
 }
 
-void event_from_window(window_id_t window_id, enum { WIN_CLOSE, WIN_RESIZE, WIN_MOVE, WIN_FOCUS } action) {
+void event_from_window(window_id_t window_id, int action) {
     event_t event = {
-        .type = EVENT_WINDOW,
-        .timestamp = time_monotonic_ms(),
-        .data.window = {
-            .window_id = window_id,
-            .action = action
-        }
+        .type = EVENT_TYPE_WINDOW,
+        .timestamp = time_monotonic_ms()
+        // Window events would need additional fields in kernel.h event_t
     };
+    (void)window_id;  // Unused for now
+    (void)action;     // Unused for now
 
     event_send_to_window(window_id, &event);
 }
@@ -317,7 +314,10 @@ void log_message(log_level_t level, const char* format, ...) {
     vsnprintf(buffer, sizeof(buffer), format, args);
     va_end(args);
 
-    serial_write(buffer);
+    // Write each character
+    for (size_t i = 0; buffer[i]; i++) {
+        serial_write(buffer[i]);
+    }
 }
 
 void log_set_level(log_level_t level) {
@@ -328,10 +328,6 @@ void log_set_level(log_level_t level) {
 // ============================================================================
 // SYSTEM TIME UTILITIES
 // ============================================================================
-
-uint64_t time_monotonic_ms(void) {
-    return sys_get_ticks() * 10;  // Approximate ms conversion
-}
 
 uint64_t time_realtime_ms(void) {
     // Would be different from monotonic if RTC supported

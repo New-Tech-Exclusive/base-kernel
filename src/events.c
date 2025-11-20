@@ -5,49 +5,7 @@
 
 #include "kernel.h"
 
-// Input event types
-typedef enum {
-    EVENT_KEYBOARD,
-    EVENT_MOUSE,
-    EVENT_WINDOW,     // Window events (resize, move, etc.)
-    EVENT_SYSTEM      // System events
-} event_type_t;
-
-// Event data structures
-typedef struct {
-    event_type_t type;
-    uint32_t timestamp;
-    uint32_t process_id;  // Target process ID
-
-    union {
-        // Keyboard event data
-        struct {
-            uint32_t keycode;
-            uint32_t modifiers;  // Ctrl, Alt, Shift, etc.
-            uint32_t state;      // Press or release
-        } keyboard;
-
-        // Mouse event data
-        struct {
-            int32_t x, y;       // Mouse position
-            uint32_t buttons;   // Button states
-            int32_t wheel;      // Mouse wheel
-        } mouse;
-
-        // Window event data
-        struct {
-            uint32_t window_id;
-            uint32_t event_type; // Resize, move, close, etc.
-            uint32_t x, y, w, h; // Window geometry
-        } window;
-
-        // System event data
-        struct {
-            uint32_t event_type;
-            uint32_t param1, param2;
-        } system;
-    } data;
-} event_t;
+// event_type_t and event_t are defined in kernel.h
 
 // Event queue structure
 #define EVENT_QUEUE_SIZE 256
@@ -151,9 +109,8 @@ int event_queue_keyboard(pid_t target_process, uint32_t keycode,
 
     // Add event to queue
     event_t* event = &queue->queue[queue->head];
-    event->type = EVENT_KEYBOARD;
+    event->type = EVENT_TYPE_KEYBOARD;
     event->timestamp = 1234567890; // Placeholder timestamp
-    event->process_id = target_process;
     event->data.keyboard.keycode = keycode;
     event->data.keyboard.modifiers = modifiers;
     event->data.keyboard.state = state;
@@ -192,9 +149,8 @@ int event_queue_mouse(pid_t target_process, int32_t x, int32_t y,
     }
 
     event_t* event = &queue->queue[queue->head];
-    event->type = EVENT_MOUSE;
+    event->type = EVENT_TYPE_MOUSE;
     event->timestamp = 1234567890;
-    event->process_id = target_process;
     event->data.mouse.x = x;
     event->data.mouse.y = y;
     event->data.mouse.buttons = buttons;
@@ -313,12 +269,30 @@ int64_t sys_event_create_queue(void)
     return event_create_queue(pid);
 }
 
-int64_t sys_event_destroy_queue(int queue_id)
+int64_t sys_event_destroy_queue(int64_t queue_id)
 {
-    return event_destroy_queue(queue_id);
+    return event_destroy_queue((int)queue_id);
 }
 
-int64_t sys_event_get_next(int queue_id, event_t* event_out)
+int64_t sys_event_get_next(event_t* event_out, uint64_t timeout)
 {
+    // For now, ignore timeout and use current process's queue
+    // In a real implementation, you'd look up the queue by current process
+    pid_t pid = scheduler_get_current_task_id();
+    
+    // Find queue for this process
+    int queue_id = -1;
+    for (int i = 0; i < MAX_EVENT_QUEUES; i++) {
+        if (event_queues[i].registered_process == pid) {
+            queue_id = i;
+            break;
+        }
+    }
+    
+    if (queue_id < 0) {
+        return -1;
+    }
+    
+    (void)timeout; // Unused for now
     return event_get_next(queue_id, event_out);
 }
