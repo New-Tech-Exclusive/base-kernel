@@ -26,6 +26,13 @@ void vga_putc_at(int pos, char c);
 int framebuffer_init(void);
 void display_server_init(void);
 
+// Storage subsystem
+void ahci_init(void);
+void fat32_mount_root(void);
+void cmd_ls(const char* args);
+void cmd_cat(const char* args);
+// void cmd_write(const char* args); // TODO: Implement write in fat32.c
+
 // Kernel subsystem declarations
 void kheap_init(void);
 void gdt_init(void);
@@ -259,6 +266,10 @@ void kernel_init(void)
 
     /* Desktop Environment */
     desktop_init();
+
+    /* Storage Subsystem */
+    ahci_init();
+    fat32_mount_root();
 
     KINFO("Kernel initialization complete, enabling interrupts");
 
@@ -702,6 +713,12 @@ void process_command(char* cmd)
                 vga_puts("Request timed out (Network unreachable)\n");
             }
         }
+    } else if (strcmp(cmd_name, "ls") == 0) {
+        cmd_ls(args);
+        vga_puts("\n");
+    } else if (strcmp(cmd_name, "cat") == 0) {
+        cmd_cat(args);
+        vga_puts("\n");
     } else {
         vga_puts("Unknown command: ");
         vga_puts(cmd_name);

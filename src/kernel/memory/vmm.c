@@ -150,7 +150,7 @@ static pte_t* vmm_get_pte(uint64_t* page_dir, uintptr_t vaddr, bool create)
 }
 
 // Map a virtual page to a physical page
-static int vmm_map_page(uint64_t* page_dir, uintptr_t vaddr, uintptr_t paddr, uint32_t prot)
+static int vmm_map_page_ctx(uint64_t* page_dir, uintptr_t vaddr, uintptr_t paddr, uint32_t prot)
 {
     pte_t* pte = vmm_get_pte(page_dir, vaddr, true);
     if (!pte) {
@@ -171,7 +171,7 @@ static int vmm_map_page(uint64_t* page_dir, uintptr_t vaddr, uintptr_t paddr, ui
 }
 
 // Unmap a virtual page
-static void vmm_unmap_page(uint64_t* page_dir, uintptr_t vaddr)
+static void vmm_unmap_page_ctx(uint64_t* page_dir, uintptr_t vaddr)
 {
     pte_t* pte = vmm_get_pte(page_dir, vaddr, false);
     if (pte && pte->present) {
@@ -304,7 +304,7 @@ int vmm_munmap(vm_context_t* ctx, void* addr, size_t length)
         if (vma->end > start && vma->start < end) {
             // Unmap pages in this VMA
             for (uintptr_t page = vma->start; page < vma->end; page += PAGE_SIZE) {
-                vmm_unmap_page(ctx->page_dir, page);
+                vmm_unmap_page_ctx(ctx->page_dir, page);
             }
             
             // Remove VMA
@@ -387,7 +387,7 @@ void vmm_page_fault_handler(uintptr_t fault_addr, uint32_t error_code)
     memset((void*)phys_page, 0, PAGE_SIZE);
     
     // Map the page
-    vmm_map_page(ctx->page_dir, page_addr, phys_page, vma->prot);
+    vmm_map_page_ctx(ctx->page_dir, page_addr, phys_page, vma->prot);
     
     KDEBUG("Demand-paged: allocated page at 0x%lx -> 0x%lx", 
            page_addr, phys_page);
@@ -410,7 +410,7 @@ void* vmm_brk(vm_context_t* ctx, void* addr)
     if (new_brk < old_brk) {
         // Shrink heap - unmap pages
         for (uintptr_t page = new_brk; page < old_brk; page += PAGE_SIZE) {
-            vmm_unmap_page(ctx->page_dir, page);
+            vmm_unmap_page_ctx(ctx->page_dir, page);
         }
     } else {
         // Expand heap - create VMA (pages allocated on demand)

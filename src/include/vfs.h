@@ -19,7 +19,14 @@ struct dquot;
 struct page;
 struct module;
 struct hlist_head;
+struct hlist_head;
 struct lock_class_key;
+
+struct qstr {
+    const unsigned char * name;
+    unsigned int len;
+    unsigned int hash;
+};
 
 // File types
 typedef enum {
@@ -197,7 +204,7 @@ struct file_system_type {
     const char* name;                          // Filesystem name
     int fs_flags;
 
-    struct dentr_y* (*mount)(struct file_system_type*, int, const char*, void*);
+    struct dentry* (*mount)(struct file_system_type*, int, const char*, void*);
 
     void (*kill_sb)(struct super_block*);
 
@@ -216,6 +223,8 @@ struct file_system_type {
 
     struct list_head fs_list;
 };
+
+typedef struct file_system_type filesystem_t;
 
 // External declarations
 extern struct file_system_type* file_systems;

@@ -10,6 +10,14 @@
 #include "types.h"
 // Note: io.h is included by individual files that need I/O functions
 
+// Compiler attributes
+#define __NORETURN __attribute__((noreturn))
+#define __NORETURN __attribute__((noreturn))
+#define __PACKED __attribute__((packed))
+
+#define ALIGN_UP(x, align) (((x) + (align) - 1) & ~((align) - 1))
+#define ALIGN_DOWN(x, align) ((x) & ~((align) - 1))
+
 // ============================================================================
 // KERNEL DEBUGGING AND PRINTING
 // ============================================================================
@@ -192,10 +200,39 @@ int64_t sys_lseek(uint64_t fd, off_t offset, int whence);
 int sys_close(uint64_t fd);
 
 // ============================================================================
+// ELF LOADER
+// ============================================================================
+
+#include "elf.h"
+
+// Page flags for memory mapping
+#define PAGE_PRESENT   0x001
+#define PAGE_WRITABLE  0x002
+#define PAGE_USER      0x004
+#define PAGE_WRITETHROUGH 0x008
+#define PAGE_CACHE_DISABLE 0x010
+#define PAGE_ACCESSED  0x020
+#define PAGE_DIRTY     0x040
+#define PAGE_HUGE      0x080
+#define PAGE_GLOBAL    0x100
+
+// Virtual memory management
+int vmm_map_page(uint64_t virtual_addr, uintptr_t physical_addr, uint32_t flags);
+int vmm_unmap_page(uint64_t virtual_addr);
+uintptr_t vmm_get_physical(uint64_t virtual_addr);
+
+// ELF loader functions
+int elf_validate(const void* elf_data, size_t size);
+int elf_load(const void* elf_data, size_t size, uint64_t* entry_point);
+uint64_t elf_get_entry(const void* elf_data);
+int elf_exec(uint64_t entry_point);
+
+// ============================================================================
 // SHARED MEMORY
 // ============================================================================
 
 // System calls for shared memory
+struct shmid_ds; // Forward declaration
 int64_t sys_shmget(key_t key, size_t size, int shmflg);
 void* sys_shmat(int shmid, const void* shmaddr, int shmflg);
 int64_t sys_shmdt(const void* shmaddr);

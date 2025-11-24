@@ -73,7 +73,12 @@ DRIVER_SRCS := $(wildcard src/drivers/*.c) \
                $(wildcard src/drivers/video/*.c) \
                $(wildcard src/drivers/serial/*.c) \
                $(wildcard src/drivers/keyboard/*.c) \
-               src/drivers/mouse/mouse.c
+               src/drivers/mouse/mouse.c \
+               src/drivers/storage/ahci.c \
+               src/drivers/block.c
+
+# Add new FS files
+KERNEL_SRCS += src/fs/fat32.c
 
 SRCS := $(BOOT_SRCS) $(ARCH_SRCS) $(KERNEL_SRCS) $(DRIVER_SRCS)
 

@@ -107,7 +107,7 @@ static void paging_create_kernel_tables(void)
  */
 
 // Map a virtual page to a physical page
-bool vmm_map_page(uintptr_t virtual_addr, uintptr_t physical_addr, uint32_t flags)
+int vmm_map_page(uint64_t virtual_addr, uintptr_t physical_addr, uint32_t flags)
 {
     // Align addresses to page boundaries
     virtual_addr &= ~(PAGE_SIZE - 1);
@@ -122,7 +122,7 @@ bool vmm_map_page(uintptr_t virtual_addr, uintptr_t physical_addr, uint32_t flag
     // Ensure PML4 entry exists
     if (!(pml4[pml4_index] & PTE_PRESENT)) {
         page_table_t pdpt = paging_alloc_page_table();
-        if (!pdpt) return false;
+        if (!pdpt) return -1;
         memset(pdpt, 0, PAGE_SIZE);
         pml4[pml4_index] = ((uintptr_t)pdpt) | PTE_PRESENT | PTE_WRITABLE;
     }
@@ -131,7 +131,7 @@ bool vmm_map_page(uintptr_t virtual_addr, uintptr_t physical_addr, uint32_t flag
     page_table_t pdpt = (page_table_t)(pml4[pml4_index] & ~0xFFFULL);
     if (!(pdpt[pdpt_index] & PTE_PRESENT)) {
         page_table_t pd = paging_alloc_page_table();
-        if (!pd) return false;
+        if (!pd) return -1;
         memset(pd, 0, PAGE_SIZE);
         pdpt[pdpt_index] = ((uintptr_t)pd) | PTE_PRESENT | PTE_WRITABLE;
     }
@@ -140,7 +140,7 @@ bool vmm_map_page(uintptr_t virtual_addr, uintptr_t physical_addr, uint32_t flag
     page_table_t pd = (page_table_t)(pdpt[pdpt_index] & ~0xFFFULL);
     if (!(pd[pd_index] & PTE_PRESENT)) {
         page_table_t pt = paging_alloc_page_table();
-        if (!pt) return false;
+        if (!pt) return -1;
         memset(pt, 0, PAGE_SIZE);
         pd[pd_index] = ((uintptr_t)pt) | PTE_PRESENT | PTE_WRITABLE;
     }
@@ -152,36 +152,36 @@ bool vmm_map_page(uintptr_t virtual_addr, uintptr_t physical_addr, uint32_t flag
     // Flush TLB for this page
     __asm__ volatile("invlpg (%0)" : : "r"(virtual_addr));
 
-    return true;
+    return 0;
 }
 
 // Unmap a virtual page
-bool vmm_unmap_page(uintptr_t virtual_addr)
+int vmm_unmap_page(uint64_t virtual_addr)
 {
     virtual_addr &= ~(PAGE_SIZE - 1);
 
     uint16_t pml4_index = (virtual_addr >> 39) & 0x1FF;
 
     if (!(pml4[pml4_index] & PTE_PRESENT))
-        return false;
+        return -1;
 
     page_table_t pdpt = (page_table_t)(pml4[pml4_index] & ~0xFFFULL);
 
     uint16_t pdpt_index = (virtual_addr >> 30) & 0x1FF;
     if (!(pdpt[pdpt_index] & PTE_PRESENT))
-        return false;
+        return -1;
 
     page_table_t pd = (page_table_t)(pdpt[pdpt_index] & ~0xFFFULL);
 
     uint16_t pd_index = (virtual_addr >> 21) & 0x1FF;
     if (!(pd[pd_index] & PTE_PRESENT))
-        return false;
+        return -1;
 
     page_table_t pt = (page_table_t)(pd[pd_index] & ~0xFFFULL);
 
     uint16_t pt_index = (virtual_addr >> 12) & 0x1FF;
     if (!(pt[pt_index] & PTE_PRESENT))
-        return false;
+        return -1;
 
     // Clear the entry
     pt[pt_index] = 0;
@@ -189,7 +189,7 @@ bool vmm_unmap_page(uintptr_t virtual_addr)
     // Flush TLB
     __asm__ volatile("invlpg (%0)" : : "r"(virtual_addr));
 
-    return true;
+    return 0;
 }
 
 // Allocate a new page table page using PMM
